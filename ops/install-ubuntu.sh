@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
+
+# EXIT may run inside a redirected function; always report to the terminal.
+exec 3>&1 4>&2
 
 REPO_URL="${EASYSRT_REPO_URL:-https://github.com/JustSo-Technology/JustSo.EasySRT.git}"
 REPO_REF="${EASYSRT_REPO_REF:-main}"
@@ -20,10 +23,14 @@ HELPER_SOCKET_PATH="/run/justso-easysrt/helper.sock"
 INSTALLING_USER="${SUDO_USER:-$USER}"
 TOTAL_STEPS=11
 CURRENT_STEP=0
+STEP_TITLE="Starting installer"
+INSTALL_LOG=""
+INSTALL_SUCCEEDED=false
+FAILURE_MESSAGE=""
+VERBOSE="${EASYSRT_VERBOSE:-0}"
 
 OS_NAME=""
 OS_VERSION=""
-KERNEL_VERSION=""
 PRIMARY_IP="127.0.0.1"
 RECOMMENDED_FRONTEND_PORT="5173"
 FRONTEND_PORT="5173"
@@ -38,23 +45,40 @@ EXISTING_RUNTIME_CONFIG="false"
 
 print_banner() {
   cat <<'EOF'
-==============================================
-        JustSo.EasySRT Ubuntu Installer
-==============================================
-            _           _____ ____  _____
-           | |         / ____|  _ \|_   _|
-           | |  _   _ | (___ | |_) | | |
-       _   | | | | | | \___ \|  _ <  | |
-      | |__| | | |_| | ____) | |_) |_| |_
-       \____/   \__,_| |_____/|____/|_____|
 
-This installer prepares a production EasySRT VM.
+  EasySRT
+  by JustSo. | Ubuntu installer
+
 EOF
+}
+
+init_logging() {
+  INSTALL_LOG="$(mktemp "${TMPDIR:-/tmp}/easysrt-install.XXXXXXXX.log")"
+  chmod 0600 "${INSTALL_LOG}"
+  printf 'Installation log: %s\n' "${INSTALL_LOG}"
+  printf 'Package and build steps may take a few minutes.\n'
+}
+
+# Keep functions in this shell: source resolution and apt setup update state.
+# Call directly so errexit still stops failures inside nested functions.
+run_logged() {
+  if [[ "${VERBOSE}" == "1" ]]; then
+    run_interactive "$@"
+  else
+    "$@" >>"${INSTALL_LOG}" 2>&1
+  fi
+}
+
+# Prompts and sudo requests stay visible and are included in the log.
+run_interactive() {
+  "$@" > >(tee -a "${INSTALL_LOG}") 2>&1
 }
 
 step() {
   CURRENT_STEP=$((CURRENT_STEP + 1))
-  printf '\n[%d/%d] %s\n' "${CURRENT_STEP}" "${TOTAL_STEPS}" "$1"
+  STEP_TITLE="$1"
+  printf '[%d/%d] %s\n' "${CURRENT_STEP}" "${TOTAL_STEPS}" "${STEP_TITLE}"
+  printf '\n[%d/%d] %s\n' "${CURRENT_STEP}" "${TOTAL_STEPS}" "${STEP_TITLE}" >>"${INSTALL_LOG}"
 }
 
 info() {
@@ -70,8 +94,51 @@ warn() {
 }
 
 die() {
+  FAILURE_MESSAGE="$1"
   printf '  [fail] %s\n' "$1" >&2
   exit 1
+}
+
+record_error() {
+  local status="$1" line="$2"
+  # Do not log BASH_COMMAND: clone URLs and config commands may contain secrets.
+  if [[ -n "${INSTALL_LOG}" ]]; then
+    printf 'Installer line %s failed (exit %s).\n' "${line}" "${status}" >>"${INSTALL_LOG}"
+  fi
+}
+
+on_exit() {
+  local status=$?
+  exec 1>&3 2>&4
+  trap - EXIT ERR INT TERM
+  set +e
+  if [[ "${INSTALL_SUCCEEDED}" != true ]]; then
+    [[ "${status}" -ne 0 ]] || status=1
+    {
+      printf '\nEasySRT installation did not complete.\n'
+      printf 'Stopped at step %d/%d: %s (exit %d).\n' "${CURRENT_STEP}" "${TOTAL_STEPS}" "${STEP_TITLE}" "${status}"
+      [[ -z "${FAILURE_MESSAGE}" ]] || printf 'Reason: %s\n' "${FAILURE_MESSAGE}"
+      if [[ -n "${INSTALL_LOG}" ]]; then
+        printf 'Read the detailed error: tail -n 60 %q\n' "${INSTALL_LOG}"
+      fi
+      case "${CURRENT_STEP}" in
+        1) printf 'Use Ubuntu Server 24.04 or newer with Python 3.12+.\n' ;;
+        2) printf 'Run sudo -v from a sudo-capable login, then retry.\n' ;;
+        3|7|8) printf 'Check the log for package, network or build errors; resolve them, then retry.\n' ;;
+        5) printf 'Check repository access and any local changes reported in the log before retrying.\n' ;;
+        6) printf 'Check the config permissions and port/origin settings reported in the log, then retry.\n' ;;
+        9|10|11)
+          printf 'Check service errors: sudo journalctl -u justso-easysrt-helper -u justso-easysrt-backend -u justso-easysrt-frontend -u justso-easysrt-updater -n 60 --no-pager\n'
+          ;;
+      esac
+      printf 'After fixing the error, rerun the same installer command.\n'
+      printf 'Keep the log for troubleshooting; it may contain private repository details.\n'
+    } >&2
+  fi
+  if [[ -n "${TRUSTED_TMP}" ]]; then
+    sudo rm -rf -- "${TRUSTED_TMP}" || printf 'Could not remove temporary source: %s\n' "${TRUSTED_TMP}" >&2
+  fi
+  exit "${status}"
 }
 
 require_command() {
@@ -148,7 +215,6 @@ detect_host() {
   else
     die "Unable to detect operating system. /etc/os-release is missing."
   fi
-  KERNEL_VERSION="$(uname -r)"
 }
 
 assert_supported_ubuntu() {
@@ -162,12 +228,12 @@ PY
 
 detect_primary_ip() {
   local route_ip
-  route_ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '/src/ {for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}')"
+  route_ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '/src/ {for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}' || true)"
   if [[ -n "${route_ip}" ]]; then
     PRIMARY_IP="${route_ip}"
     return
   fi
-  route_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  route_ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
   if [[ -n "${route_ip}" ]]; then
     PRIMARY_IP="${route_ip}"
   fi
@@ -210,7 +276,7 @@ read_runtime_env_value() {
 load_existing_runtime_config() {
   local value
 
-  sudo test -f "${ENV_FILE}" || return
+  sudo test -f "${ENV_FILE}" || return 0
   EXISTING_RUNTIME_CONFIG="true"
 
   value="$(read_runtime_env_value EASYSRT_FRONTEND_PORT)"
@@ -401,7 +467,7 @@ configure_runtime() {
   fi
   detect_primary_ip
   info "Detected IP addresses: $(list_ip_addresses)"
-  info "Currently used TCP ports: $(list_used_ports)"
+  [[ "${VERBOSE}" != "1" ]] || info "Currently used TCP ports: $(list_used_ports)"
   FRONTEND_PORT="$(prompt_with_default "Frontend port" "${RECOMMENDED_FRONTEND_PORT}")"
   if ! [[ "${FRONTEND_PORT}" =~ ^[0-9]+$ ]] || (( FRONTEND_PORT < 1 || FRONTEND_PORT > 65535 )); then
     die "Frontend port must be a valid TCP port."
@@ -435,7 +501,11 @@ PY
   fi
 
   if [[ -z "${PUBLIC_ORIGIN}" ]]; then
-    PUBLIC_ORIGIN="http://${PRIMARY_IP}:${FRONTEND_PORT}"
+    if [[ "${FRONTEND_HOST}" == "127.0.0.1" ]]; then
+      PUBLIC_ORIGIN="http://localhost:${FRONTEND_PORT}"
+    else
+      PUBLIC_ORIGIN="http://${PRIMARY_IP}:${FRONTEND_PORT}"
+    fi
   fi
   origin_host="$(python3 - "${PUBLIC_ORIGIN}" <<'PY'
 import sys
@@ -573,7 +643,6 @@ install_services() {
 }
 
 health_check() {
-  local frontend_url="${PUBLIC_ORIGIN}"
   local backend_health="http://127.0.0.1:${BACKEND_PORT}/health"
   local updater_health="http://127.0.0.1:${UPDATER_PORT}/health"
   local helper_socket_identity
@@ -610,76 +679,80 @@ health_check() {
     die "Frontend still appears to be serving a Vite dev build."
   fi
   ok "Backend, frontend, and updater health checks passed."
-  printf '\nInstall complete.\n\n'
-  printf 'Open: %s\n' "${frontend_url}"
-  if [[ "${FRONTEND_HOST}" == "127.0.0.1" ]]; then
-    printf 'Tunnel target: http://localhost:%s\n' "${FRONTEND_PORT}"
+}
+
+show_next_steps() {
+  printf '\nEasySRT is ready.\n\n'
+  if [[ "${FRONTEND_HOST}" == "127.0.0.1" && "${PUBLIC_ORIGIN}" != https://* ]]; then
+    printf 'From your computer, open an SSH tunnel (keep it running):\n'
+    printf '  ssh -N -L %s:127.0.0.1:%s -L %s:127.0.0.1:%s %s@%s\n' \
+      "${FRONTEND_PORT}" "${FRONTEND_PORT}" "${UPDATER_PORT}" "${UPDATER_PORT}" "${INSTALLING_USER}" "${PRIMARY_IP}"
+    printf 'Then open: http://localhost:%s\n' "${FRONTEND_PORT}"
+  else
+    printf 'Open in your browser: %s\n' "${PUBLIC_ORIGIN}"
   fi
-  printf '\nThen:\n'
-  printf '1. Create your first owner account\n'
-  printf '2. Configure input and destination\n'
-  printf '3. Save your site config\n'
-  printf '4. Start the sender from the Control tab\n'
-  printf '\n'
-  printf 'Installed branch: %s\n' "${REPO_REF}"
-  printf 'Installed repo:   %s\n' "${REPO_URL}"
-  printf 'App root:         %s\n' "${APP_DIR}"
+  if [[ "${PUBLIC_ORIGIN}" == https://* ]]; then
+    printf 'Use your configured HTTPS reverse proxy for sign-in; TLS is not provisioned by this installer.\n'
+  fi
+  printf '\n1. Create your first owner account (or sign in if already configured).\n'
+  printf '2. Configure your input and destination, then save.\n'
+  printf '3. Start the sender from the Control tab when ready.\n'
+  printf '\nInstalled ref: %s | Commit: %s\n' "${REPO_REF}" "${TRUSTED_COMMIT}"
+  printf 'Installation log: %s\n' "${INSTALL_LOG}"
 }
 
 main() {
   print_banner
+  init_logging
 
   step "Validating Ubuntu host"
-  detect_host
-  assert_supported_ubuntu
-  detect_primary_ip
-  find_recommended_port
+  run_logged detect_host
+  run_logged assert_supported_ubuntu
+  run_logged detect_primary_ip
+  run_logged find_recommended_port
   info "OS: ${OS_NAME} ${OS_VERSION}"
-  info "Kernel: ${KERNEL_VERSION}"
-  info "Primary IP: ${PRIMARY_IP}"
-  info "Used TCP ports: $(list_used_ports)"
-  info "Recommended frontend port: ${RECOMMENDED_FRONTEND_PORT}"
-  ok "Host validation passed."
 
   step "Checking sudo access"
-  ensure_sudo
+  run_interactive ensure_sudo
 
   step "Installing base packages"
-  apt_install_if_missing git curl ca-certificates ffmpeg python3 python3-venv build-essential acl rsync
-  ensure_node_runtime
-  ensure_pnpm
-  assert_python_version
-  ensure_uv
+  run_logged apt_install_if_missing git curl ca-certificates ffmpeg python3 python3-venv build-essential acl rsync
+  run_logged ensure_node_runtime
+  run_logged ensure_pnpm
+  run_logged assert_python_version
+  run_logged ensure_uv
 
   step "Creating service user and group"
-  ensure_user_and_group
+  run_logged ensure_user_and_group
 
   step "Installing or updating the EasySRT repo"
-  prepare_privileged_source
-  clone_or_update_repo
+  ensure_repo_token_if_needed
+  run_logged prepare_privileged_source
+  run_logged clone_or_update_repo
 
   step "Configuring runtime ports and local install settings"
-  configure_runtime
+  run_interactive configure_runtime
 
   step "Installing backend dependencies"
-  install_backend
+  run_logged install_backend
 
   step "Installing frontend dependencies and building production assets"
-  install_frontend
+  run_logged install_frontend
 
   step "Installing systemd services"
-  install_services
+  run_logged install_services
 
   step "Re-checking network state and selected frontend port"
-  detect_primary_ip
-  info "Primary IP: ${PRIMARY_IP}"
-  info "Used TCP ports: $(list_used_ports)"
-  info "Configured frontend port: ${FRONTEND_PORT}"
-  ok "Runtime network state captured."
+  run_logged detect_primary_ip
 
   step "Running final health checks and showing next steps"
-  health_check
+  run_logged health_check
+  INSTALL_SUCCEEDED=true
+  show_next_steps
 }
 
-trap '[[ -z "${TRUSTED_TMP}" ]] || sudo rm -rf -- "${TRUSTED_TMP}"' EXIT
+trap 'record_error "$?" "$LINENO"' ERR
+trap on_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 main "$@"

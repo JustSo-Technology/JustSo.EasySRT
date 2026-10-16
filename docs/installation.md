@@ -18,6 +18,12 @@ This command downloads with curl and then executes a file, preserving stdin for 
 
 Follow the prompts for frontend port, localhost-only binding, station name and support contact. Default frontend is TCP 5173 when available; the backend uses loopback TCP 8000 and the updater normally TCP 5174. Open the URL printed at completion. Keep UI/updater access restricted to the management network. If you choose localhost-only, use an SSH tunnel or reverse proxy; the VM's frontend port is not directly reachable remotely.
 
+The terminal shows one line per install step; package downloads and build output go to the private log file printed at the start. To watch that output live from another SSH session, use `tail -f /tmp/easysrt-install.XXXXXXXX.log` with the actual printed path. For detailed terminal output, rerun with `EASYSRT_VERBOSE=1` before the same installer command.
+
+On success, the installer prints **EasySRT is ready**, the actual browser URL and account/stream setup steps. A localhost-only installation prints an SSH command forwarding both the frontend and updater ports; run it on your computer, keep it open and visit the printed localhost URL. If you selected an HTTPS public origin, configure its reverse proxy before signing in; the installer does not provision TLS.
+
+If installation stops, it prints the failed step, exit status, log path and recovery guidance. Read the detailed error with the printed `tail -n 60 ...` command. Package/build failures need their reported package or network problem resolved; service failures include a `journalctl` command. Fix that error, then rerun the same installer command. An interrupted fresh installation can be retried: existing runtime settings and the session secret are reused. Resolve any reported application-checkout changes before retrying; do not delete existing configuration or data to clear an error. Logs may contain private repository details, so review them before sharing.
+
 Then [create your owner account and configure a stream](configuration.md). For HTTPS, set the public origin with `EASYSRT_PUBLIC_ORIGIN` when invoking the installer and configure the reverse proxy, updater origin and firewall as described in [deployment security](deployment-security.md). Choosing an HTTPS origin does not provision TLS.
 
 ## Inspect or select the source before installation
