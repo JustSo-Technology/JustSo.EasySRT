@@ -183,7 +183,10 @@ detect_primary_ip
 
     def check_runtime_configuration(self, host):
         with tempfile.TemporaryDirectory() as directory:
-            body = DEFINITIONS + r"""
+            # Sandbox direct shell file tests as well as sudo commands, even
+            # when the machine already has a real EasySRT installation.
+            definitions = DEFINITIONS.replace('/var/lib/justso-easysrt-updates', directory + '/updates')
+            body = definitions + r"""
 CONFIG_DIR="$TMPDIR/config"
 ENV_FILE="$CONFIG_DIR/easysrt.env"
 BACKEND_DIR="$TMPDIR/backend"
