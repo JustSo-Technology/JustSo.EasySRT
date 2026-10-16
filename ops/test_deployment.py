@@ -154,7 +154,7 @@ sudo() {
 
     def test_node_supported_versions(self):
         for script in ('install-ubuntu.sh', 'update-ubuntu.sh'):
-            for version, accepted in [('20.18.3', False), ('20.19.0', True), ('21.9.0', False), ('22.11.0', False), ('22.12.0', True), ('24.0.0', True)]:
+            for version, accepted in [('20.18.3', False), ('20.19.0', False), ('21.9.0', False), ('22.11.0', False), ('22.12.0', False), ('22.13.0', True), ('24.0.0', True)]:
                 with self.subTest(script=script, version=version):
                     # Run the real JavaScript predicate with a substituted version.
                     predicate = function(script, 'node_runtime_supported').replace('process.versions.node', json.dumps(version))
