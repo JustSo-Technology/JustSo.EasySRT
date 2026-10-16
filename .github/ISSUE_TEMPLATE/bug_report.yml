@@ -1,0 +1,30 @@
+name: Bug report
+description: Report a reproducible EasySRT problem
+body:
+  - type: markdown
+    attributes:
+      value: Do not report security vulnerabilities here. See SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour and sanitized logs
+    validations:
+      required: true

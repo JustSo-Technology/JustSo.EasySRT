@@ -1,0 +1,277 @@
+{
+  "format": "justso.easysrt.legacy-extraction",
+  "extraction_version": 1,
+  "note": "Sanitized fixture matching the structure of the April installation: five presets, one input, three destinations.",
+  "source": {
+    "host": "example-old-vm",
+    "application_version": "0.1.0",
+    "commit": "ebd0944c66c1ba5ee55e2c96cc89d3edb2dec7bc"
+  },
+  "app": {
+    "station_name": "Example station",
+    "support_contact": "support@example.test"
+  },
+  "active_site": {
+    "input": {
+      "name": "Example stream",
+      "url": "http://audio.example.test/programme.mp3"
+    },
+    "destination": {
+      "name": "Example receiver",
+      "protocol": "srt",
+      "host": "receiver.example.test",
+      "port": 16004
+    },
+    "profile": {
+      "name": "broadcast-standard",
+      "audio_bitrate_kbps": 256,
+      "sample_rate_hz": 48000,
+      "channels": 2,
+      "srt_latency_ms": 120,
+      "mux_rate_kbps": 1000,
+      "pcr_period_ms": 20,
+      "enable_video": false,
+      "video_codec": "mpeg2video",
+      "video_bitrate_kbps": 500,
+      "video_resolution": "640x360",
+      "video_frame_rate": 25,
+      "video_source": "black_test_frames"
+    }
+  },
+  "runtime_observation": {
+    "ffmpeg_command": "DO NOT EXECUTE: old generated runtime excluded"
+  },
+  "saved_configs": [
+    {
+      "id": "old-preset-0",
+      "name": "Example preset 1",
+      "site_payload": {
+        "input": {
+          "name": "Example stream",
+          "url": "http://audio.example.test/programme.mp3"
+        },
+        "destination": {
+          "name": "Example receiver",
+          "protocol": "srt",
+          "host": "receiver.example.test",
+          "port": 16000
+        },
+        "profile": {
+          "name": "broadcast-standard",
+          "audio_bitrate_kbps": 256,
+          "sample_rate_hz": 48000,
+          "channels": 2,
+          "srt_latency_ms": 80,
+          "mux_rate_kbps": 1000,
+          "pcr_period_ms": 20,
+          "enable_video": true,
+          "video_codec": "mpeg2video",
+          "video_bitrate_kbps": 500,
+          "video_resolution": "640x360",
+          "video_frame_rate": 25,
+          "video_source": "black_test_frames"
+        }
+      },
+      "created_by_user_id": "old-user",
+      "created_at": "2026-04-14 06:27:31.641177",
+      "updated_at": "2026-04-14 06:27:31.641177",
+      "last_loaded_at": null
+    },
+    {
+      "id": "old-preset-1",
+      "name": "Example preset 2",
+      "site_payload": {
+        "input": {
+          "name": "Example stream",
+          "url": "http://audio.example.test/programme.mp3"
+        },
+        "destination": {
+          "name": "Example receiver",
+          "protocol": "srt",
+          "host": "receiver.example.test",
+          "port": 16001
+        },
+        "profile": {
+          "name": "broadcast-standard",
+          "audio_bitrate_kbps": 256,
+          "sample_rate_hz": 48000,
+          "channels": 2,
+          "srt_latency_ms": 120,
+          "mux_rate_kbps": 1000,
+          "pcr_period_ms": 20,
+          "enable_video": false,
+          "video_codec": "mpeg2video",
+          "video_bitrate_kbps": 500,
+          "video_resolution": "640x360",
+          "video_frame_rate": 25,
+          "video_source": "black_test_frames"
+        }
+      },
+      "created_by_user_id": "old-user",
+      "created_at": "2026-04-19 11:25:15.606531",
+      "updated_at": "2026-08-06 07:29:12.143058",
+      "last_loaded_at": "2026-05-08 05:09:21.535606"
+    },
+    {
+      "id": "old-preset-2",
+      "name": "Example preset 3",
+      "site_payload": {
+        "input": {
+          "name": "Example stream",
+          "url": "http://audio.example.test/programme.mp3"
+        },
+        "destination": {
+          "name": "Example receiver",
+          "protocol": "srt",
+          "host": "receiver.example.test",
+          "port": 16002
+        },
+        "profile": {
+          "name": "broadcast-standard",
+          "audio_bitrate_kbps": 256,
+          "sample_rate_hz": 48000,
+          "channels": 2,
+          "srt_latency_ms": 80,
+          "mux_rate_kbps": 1000,
+          "pcr_period_ms": 20,
+          "enable_video": false,
+          "video_codec": "mpeg2video",
+          "video_bitrate_kbps": 500,
+          "video_resolution": "640x360",
+          "video_frame_rate": 25,
+          "video_source": "black_test_frames"
+        }
+      },
+      "created_by_user_id": "old-user",
+      "created_at": "2026-05-08 04:53:42.347053",
+      "updated_at": "2026-05-08 04:53:42.347053",
+      "last_loaded_at": null
+    },
+    {
+      "id": "old-preset-3",
+      "name": "Example preset 4",
+      "site_payload": {
+        "input": {
+          "name": "Example stream",
+          "url": "http://audio.example.test/programme.mp3"
+        },
+        "destination": {
+          "name": "Example receiver",
+          "protocol": "srt",
+          "host": "receiver.example.test",
+          "port": 16003
+        },
+        "profile": {
+          "name": "broadcast-standard",
+          "audio_bitrate_kbps": 256,
+          "sample_rate_hz": 48000,
+          "channels": 2,
+          "srt_latency_ms": 80,
+          "mux_rate_kbps": 1000,
+          "pcr_period_ms": 20,
+          "enable_video": false,
+          "video_codec": "mpeg2video",
+          "video_bitrate_kbps": 500,
+          "video_resolution": "640x360",
+          "video_frame_rate": 25,
+          "video_source": "black_test_frames"
+        }
+      },
+      "created_by_user_id": "old-user",
+      "created_at": "2026-05-08 05:03:26.821254",
+      "updated_at": "2026-05-08 05:03:26.821254",
+      "last_loaded_at": "2026-05-08 05:16:03.420224"
+    },
+    {
+      "id": "old-preset-4",
+      "name": "Example preset 5",
+      "site_payload": {
+        "input": {
+          "name": "Example stream",
+          "url": "http://audio.example.test/programme.mp3"
+        },
+        "destination": {
+          "name": "Example receiver",
+          "protocol": "srt",
+          "host": "receiver.example.test",
+          "port": 16004
+        },
+        "profile": {
+          "name": "broadcast-standard",
+          "audio_bitrate_kbps": 256,
+          "sample_rate_hz": 48000,
+          "channels": 2,
+          "srt_latency_ms": 80,
+          "mux_rate_kbps": 1000,
+          "pcr_period_ms": 20,
+          "enable_video": false,
+          "video_codec": "mpeg2video",
+          "video_bitrate_kbps": 500,
+          "video_resolution": "640x360",
+          "video_frame_rate": 25,
+          "video_source": "black_test_frames"
+        }
+      },
+      "created_by_user_id": "old-user",
+      "created_at": "2026-05-08 05:17:30.422110",
+      "updated_at": "2026-05-08 05:17:30.422110",
+      "last_loaded_at": null
+    }
+  ],
+  "saved_inputs": [
+    {
+      "id": "old-input-0",
+      "name": "Example stream",
+      "input_payload": {
+        "name": "Example stream",
+        "url": "http://audio.example.test/programme.mp3"
+      },
+      "created_at": "2026-04-14 06:18:57.942285",
+      "updated_at": "2026-04-14 06:18:57.942285"
+    }
+  ],
+  "saved_destinations": [
+    {
+      "id": "old-destination-0",
+      "name": "Example receiver 1",
+      "destination_payload": {
+        "name": "Example receiver 1",
+        "protocol": "srt",
+        "host": "receiver.example.test",
+        "port": 16000
+      },
+      "created_at": "2026-04-14 06:26:00.348623",
+      "updated_at": "2026-04-14 06:26:00.348623"
+    },
+    {
+      "id": "old-destination-1",
+      "name": "Example receiver 2",
+      "destination_payload": {
+        "name": "Example receiver 2",
+        "protocol": "srt",
+        "host": "receiver.example.test",
+        "port": 16001
+      },
+      "created_at": "2026-05-07 05:01:32.580144",
+      "updated_at": "2026-05-07 05:01:32.580144"
+    },
+    {
+      "id": "old-destination-2",
+      "name": "Example receiver 3",
+      "destination_payload": {
+        "name": "Example receiver 3",
+        "protocol": "srt",
+        "host": "receiver.example.test",
+        "port": 16002
+      },
+      "created_at": "2026-05-08 05:17:13.699637",
+      "updated_at": "2026-05-08 05:17:13.699637"
+    }
+  ],
+  "selection_state": [
+    {
+      "id": "default",
+      "active_saved_config_id": "old-preset-4"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+[Unit]
+Description=JustSo EasySRT Host Control Helper
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+RuntimeDirectory=justso-easysrt
+RuntimeDirectoryMode=0750
+UMask=0007
+# Update jobs deliberately drop from root to the easysrt service account for
+# Git and build work, which requires the helper process to retain setuid/setgid.
+NoNewPrivileges=false
+PrivateTmp=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+Environment=EASYSRT_HELPER_SOCKET_PATH=/run/justso-easysrt/helper.sock
+Environment=EASYSRT_APP_USER=easysrt
+Environment=EASYSRT_APP_ROOT=/opt/justso-easysrt
+Environment=EASYSRT_SENDER_SERVICE=easysrt-sender
+Environment=EASYSRT_UPDATE_SCRIPT=/usr/local/lib/justso-easysrt/update-ubuntu.sh
+ExecStart=/usr/bin/python3 -I /usr/local/lib/justso-easysrt/host-control-helper.py
+# Keep an in-flight updater alive when it refreshes this helper.
+KillMode=process
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

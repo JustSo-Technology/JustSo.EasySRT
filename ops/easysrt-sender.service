@@ -1,0 +1,21 @@
+[Unit]
+Description=JustSo EasySRT Sender
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=easysrt
+Group=easysrt
+WorkingDirectory=/opt/justso-easysrt/backend
+EnvironmentFile=-/etc/justso-easysrt/easysrt.env
+EnvironmentFile=/opt/justso-easysrt/backend/data/sender.env
+ExecStart=/bin/bash -lc 'if [ -z "${FFMPEG_CMD:-}" ]; then echo "FFMPEG_CMD is not set" >&2; exit 1; fi; eval "exec ${FFMPEG_CMD}"'
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+SuccessExitStatus=255
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

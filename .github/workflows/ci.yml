@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  workflow_call:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Install locked backend dependencies
+        working-directory: backend
+        run: uv sync --locked
+      - name: Run backend tests
+        working-directory: backend
+        run: uv run pytest -q
+      - name: Audit locked backend dependencies
+        working-directory: backend
+        run: uv audit --frozen
+
+  frontend:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: "10.17.1"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install locked frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        working-directory: frontend
+        run: pnpm lint
+      - name: Test
+        working-directory: frontend
+        run: pnpm test
+      - name: Build and type-check
+        working-directory: frontend
+        run: pnpm build
+      - name: Audit frontend dependencies including build tools
+        working-directory: frontend
+        run: pnpm audit --audit-level=low
+
+  operations:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Validate shell scripts
+        run: |
+          for script in ops/*.sh tools/*.sh; do bash -n "$script"; done
+          shellcheck ops/*.sh tools/*.sh
+      - name: Compile operation helpers
+        run: python3 -m py_compile ops/*.py
+      - name: Test deployment prerequisites and locked installation
+        run: python3 -m unittest discover -s ops -p 'test_*.py' -v
+      - name: Validate candidate release metadata
+        run: bash tools/release-check.sh "v$(node -p "require('./frontend/package.json').version")"
+
+  secrets:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Scan Git history for secrets
+        run: >-
+          docker run --rm
+          -v "$PWD:/repo"
+          ghcr.io/gitleaks/gitleaks:v8.30.1
+          git --redact --verbose --no-banner /repo

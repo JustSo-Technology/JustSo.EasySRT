@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  validate-and-release:
+    needs: checks
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: "10.17.1"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Validate release metadata
+        run: bash tools/release-check.sh "${GITHUB_REF_NAME}"
+      - name: Require protected main and a verified signed tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git merge-base --is-ancestor HEAD origin/main
+          [[ "$(gh api "repos/${GITHUB_REPOSITORY}/branches/main" --jq '.protected')" == true ]]
+          tag_object="$(git rev-parse "refs/tags/${GITHUB_REF_NAME}")"
+          [[ "$(git cat-file -t "$tag_object")" == tag ]]
+          [[ "$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${tag_object}" --jq '.verification.verified')" == true ]]
+      - name: Test backend
+        working-directory: backend
+        run: uv sync --locked && uv run pytest -q
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile && pnpm lint && pnpm test && pnpm build
+      - name: Build source archives
+        run: |
+          git archive --format=tar.gz --prefix="JustSo.EasySRT-${GITHUB_REF_NAME}/" -o "JustSo.EasySRT-${GITHUB_REF_NAME}.tar.gz" HEAD
+          git archive --format=zip --prefix="JustSo.EasySRT-${GITHUB_REF_NAME}/" -o "JustSo.EasySRT-${GITHUB_REF_NAME}.zip" HEAD
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease_flag=()
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+            prerelease_flag=(--prerelease)
+          fi
+          gh release create "${GITHUB_REF_NAME}" \
+            --verify-tag \
+            --generate-notes \
+            "${prerelease_flag[@]}" \
+            "JustSo.EasySRT-${GITHUB_REF_NAME}.tar.gz" \
+            "JustSo.EasySRT-${GITHUB_REF_NAME}.zip"

@@ -1,0 +1,19 @@
+[Unit]
+Description=JustSo EasySRT Backend
+After=network.target justso-easysrt-helper.service
+Wants=network.target justso-easysrt-helper.service
+
+[Service]
+Type=simple
+User=easysrt
+Group=easysrt
+WorkingDirectory=/opt/justso-easysrt
+Environment=HOME=/home/easysrt
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+EnvironmentFile=-/etc/justso-easysrt/easysrt.env
+ExecStart=/opt/justso-easysrt/ops/run-backend.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
