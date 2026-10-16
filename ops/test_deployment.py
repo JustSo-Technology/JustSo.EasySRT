@@ -201,6 +201,32 @@ install_privileged_files() { return 42; }
                     result = self.run_shell(body, {**env, 'CONFIG_DIR': directory, 'ENV_FILE': directory, 'APP_GROUP': 'test'})
                     self.assertEqual(result.returncode, 42, result.stderr)
 
+    def test_frontend_package_setup_cannot_wait_for_hidden_corepack_prompt(self):
+        for script in ('install-ubuntu.sh', 'update-ubuntu.sh'):
+            with self.subTest(script=script), tempfile.TemporaryDirectory() as directory:
+                bin_dir = Path(directory, 'bin')
+                bin_dir.mkdir()
+                # Retain the caller's PATH while exercising the actual env and
+                # shell invocation used under sudo's service account.
+                Path(bin_dir, 'bash').write_text('#!/bin/sh\nexec /bin/sh -c "$2"\n')
+                Path(bin_dir, 'pnpm').write_text(
+                    '#!/bin/sh\n'
+                    '[ "$COREPACK_ENABLE_DOWNLOAD_PROMPT" = 0 ] || exit 10\n'
+                    '[ "$CI" = 1 ] || exit 11\n'
+                    'printf "%s\\n" "$*"\n')
+                for executable in bin_dir.iterdir():
+                    executable.chmod(0o755)
+                body = r"""
+info() { :; }
+ok() { :; }
+record_log() { :; }
+sudo() { [[ "$1" == -u && "$2" == easysrt ]]; shift 2; command "$@"; }
+""" + function(script, 'install_frontend') + '\ninstall_frontend'
+                result = self.run_shell(body, {**os.environ, 'PATH': str(bin_dir) + ':' + os.environ['PATH'],
+                    'APP_USER': 'easysrt', 'FRONTEND_DIR': directory})
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.splitlines(), ['install --frozen-lockfile', 'build'])
+
     def test_token_cannot_change_clone_host(self):
         for script in ('install-ubuntu.sh', 'update-ubuntu.sh'):
             with self.subTest(script=script):

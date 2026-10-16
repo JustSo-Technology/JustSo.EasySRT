@@ -28,6 +28,8 @@ INSTALL_LOG=""
 INSTALL_SUCCEEDED=false
 FAILURE_MESSAGE=""
 VERBOSE="${EASYSRT_VERBOSE:-0}"
+PROGRESS_PID=""
+PROGRESS_FLAG=""
 
 OS_NAME=""
 OS_VERSION=""
@@ -65,7 +67,43 @@ run_logged() {
   if [[ "${VERBOSE}" == "1" ]]; then
     run_interactive "$@"
   else
+    start_progress
     "$@" >>"${INSTALL_LOG}" 2>&1
+    stop_progress
+  fi
+}
+
+start_progress() {
+  PROGRESS_FLAG="$(mktemp "${INSTALL_LOG}.progress.XXXXXXXX")"
+  (
+    trap - EXIT ERR INT TERM
+    exec python3 - "${STEP_TITLE}" "${PROGRESS_FLAG}" "$$" <<'PROGRESS' >&3 2>>"${INSTALL_LOG}"
+import os
+import sys
+import time
+
+started = time.monotonic()
+report_interval = 15
+next_report = started + report_interval
+while os.path.exists(sys.argv[2]) and os.getppid() == int(sys.argv[3]):
+    now = time.monotonic()
+    if now >= next_report:
+        print(f"  Still working: {sys.argv[1]} ({int(now - started)}s elapsed).", flush=True)
+        next_report = now + report_interval
+    time.sleep(0.1)
+PROGRESS
+  ) &
+  PROGRESS_PID=$!
+}
+
+stop_progress() {
+  if [[ -n "${PROGRESS_FLAG}" ]]; then
+    rm -f -- "${PROGRESS_FLAG}"
+    PROGRESS_FLAG=""
+  fi
+  if [[ -n "${PROGRESS_PID}" ]]; then
+    wait "${PROGRESS_PID}" 2>/dev/null || true
+    PROGRESS_PID=""
   fi
 }
 
@@ -112,6 +150,7 @@ on_exit() {
   exec 1>&3 2>&4
   trap - EXIT ERR INT TERM
   set +e
+  stop_progress
   if [[ "${INSTALL_SUCCEEDED}" != true ]]; then
     [[ "${status}" -ne 0 ]] || status=1
     {
@@ -307,12 +346,24 @@ prompt_with_default() {
 prompt_yes_no_default() {
   local prompt="$1"
   local default="$2"
-  local response=""
-  if [[ -t 0 ]]; then
-    read -r -p "${prompt} [${default}]: " response
+  local response choices
+  if [[ "${default}" == "y" ]]; then
+    choices="Y/n"
+  else
+    choices="y/N"
   fi
-  response="${response:-$default}"
-  [[ "${response}" =~ ^[Yy]$ ]]
+  while true; do
+    response=""
+    if [[ -t 0 ]]; then
+      read -r -p "${prompt} [${choices}]: " response || die "Input ended before this question was answered."
+    fi
+    response="${response:-$default}"
+    case "${response}" in
+      [Yy]|[Yy][Ee][Ss]) return 0 ;;
+      [Nn]|[Nn][Oo]) return 1 ;;
+      *) printf 'Please answer yes or no.\n' >&2 ;;
+    esac
+  done
 }
 
 ensure_sudo() {
@@ -453,7 +504,7 @@ clone_or_update_repo() {
 
 configure_runtime() {
   local allow_insecure_http
-  local frontend_host_default="n"
+  local frontend_host_default="y"
   local origin_host
   local secret_key
   local session_cookie_secure
@@ -468,7 +519,7 @@ configure_runtime() {
   detect_primary_ip
   info "Detected IP addresses: $(list_ip_addresses)"
   [[ "${VERBOSE}" != "1" ]] || info "Currently used TCP ports: $(list_used_ports)"
-  FRONTEND_PORT="$(prompt_with_default "Frontend port" "${RECOMMENDED_FRONTEND_PORT}")"
+  FRONTEND_PORT="$(prompt_with_default "Which port should the EasySRT web UI use?" "${RECOMMENDED_FRONTEND_PORT}")"
   if ! [[ "${FRONTEND_PORT}" =~ ^[0-9]+$ ]] || (( FRONTEND_PORT < 1 || FRONTEND_PORT > 65535 )); then
     die "Frontend port must be a valid TCP port."
   fi
@@ -477,17 +528,18 @@ configure_runtime() {
   elif ! port_is_free "${FRONTEND_PORT}"; then
     warn "Port ${FRONTEND_PORT} is already in use."
   fi
-  if [[ "${FRONTEND_HOST}" == "127.0.0.1" ]]; then
-    frontend_host_default="y"
+  if [[ "${EXISTING_RUNTIME_CONFIG}" == "true" && "${FRONTEND_HOST}" != "127.0.0.1" ]]; then
+    frontend_host_default="n"
   fi
-  if prompt_yes_no_default "Bind frontend to localhost only (good for tunnel-only installs)?" "${frontend_host_default}"; then
+  info "Yes uses an SSH tunnel; No allows access from other devices on your network."
+  if prompt_yes_no_default "Keep the web UI accessible only from this machine?" "${frontend_host_default}"; then
     FRONTEND_HOST="127.0.0.1"
   else
     FRONTEND_HOST="0.0.0.0"
   fi
 
-  STATION_NAME="$(prompt_with_default "Station name" "${STATION_NAME}")"
-  SUPPORT_CONTACT="$(prompt_with_default "Support contact" "${SUPPORT_CONTACT}")"
+  STATION_NAME="$(prompt_with_default "What is your station name?" "${STATION_NAME}")"
+  SUPPORT_CONTACT="$(prompt_with_default "What support contact should EasySRT display?" "${SUPPORT_CONTACT}")"
 
   sudo install -d -o root -g "${APP_GROUP}" -m 0750 "${CONFIG_DIR}"
   if sudo test -f "${ENV_FILE}" && sudo grep -q '^EASYSRT_SECRET_KEY=' "${ENV_FILE}"; then
@@ -524,7 +576,11 @@ PY
   else
     session_cookie_secure="false"
     allow_insecure_http="true"
-    warn "LAN HTTP mode selected. Put EasySRT behind HTTPS before exposing it beyond a trusted network."
+    if [[ "${FRONTEND_HOST}" == "127.0.0.1" ]]; then
+      info "Local HTTP selected; use the SSH tunnel printed at completion."
+    else
+      warn "LAN HTTP mode selected. Put EasySRT behind HTTPS before exposing it beyond a trusted network."
+    fi
   fi
 
   sudo tee "${ENV_FILE}" >/dev/null <<EOF
@@ -589,9 +645,9 @@ install_backend() {
 
 install_frontend() {
   info "Installing frontend dependencies"
-  sudo -u "${APP_USER}" bash -lc "cd '${FRONTEND_DIR}' && pnpm install --frozen-lockfile"
+  sudo -u "${APP_USER}" env COREPACK_ENABLE_DOWNLOAD_PROMPT=0 CI=1 bash -lc "cd '${FRONTEND_DIR}' && pnpm install --frozen-lockfile"
   info "Building production frontend"
-  sudo -u "${APP_USER}" bash -lc "cd '${FRONTEND_DIR}' && pnpm build"
+  sudo -u "${APP_USER}" env COREPACK_ENABLE_DOWNLOAD_PROMPT=0 CI=1 bash -lc "cd '${FRONTEND_DIR}' && pnpm build"
   ok "Frontend production build ready."
 }
 
