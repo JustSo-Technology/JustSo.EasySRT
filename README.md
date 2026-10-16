@@ -1,6 +1,6 @@
 # JustSo.EasySRT
 
-[EasySRT website](https://easusrt.justso.tech)
+[EasySRT website](https://easysrt.justso.tech)
 
 Linux-first SRT contribution sender with a FastAPI backend, React WebUI, a root-owned local control helper, and a `systemd`-managed `ffmpeg` runtime.
 
