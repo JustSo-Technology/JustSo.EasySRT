@@ -353,7 +353,7 @@ apt_install_if_missing() {
 
 node_runtime_supported() {
   command -v node >/dev/null 2>&1 || return 1
-  node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit((major === 20 && minor >= 19) || (major === 22 && minor >= 12) || major > 22 ? 0 : 1)'
+  node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit((major === 22 && minor >= 13) || major > 22 ? 0 : 1)'
 }
 
 ensure_node_runtime() {
@@ -362,11 +362,11 @@ ensure_node_runtime() {
     return
   fi
 
-  info "Installing Node.js 22.x (at least 22.12 is required)."
+  info "Installing Node.js 22.x (at least 22.13 is required)."
   curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
   apt_update_done=1
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs
-  node_runtime_supported || die "Node.js 20.19+ or 22.12+ is required (Node 21 is unsupported)."
+  node_runtime_supported || die "Node.js 22.13+ is required; Node 22 LTS is recommended."
   ok "Node.js upgraded."
 }
 

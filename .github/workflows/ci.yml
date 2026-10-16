@@ -36,6 +36,10 @@ jobs:
         run: uv audit --frozen
 
   frontend:
+    strategy:
+      matrix:
+        node: ["22.13.0", "22"]
+    name: frontend-${{ matrix.node }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -44,7 +48,7 @@ jobs:
           version: "10.17.1"
       - uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: ${{ matrix.node }}
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
       - name: Install locked frontend dependencies
@@ -62,6 +66,14 @@ jobs:
       - name: Audit frontend dependencies including build tools
         working-directory: frontend
         run: pnpm audit --audit-level=low
+
+  frontend-required:
+    name: frontend
+    if: always()
+    needs: frontend
+    runs-on: ubuntu-24.04
+    steps:
+      - run: test "${{ needs.frontend.result }}" = success
 
   operations:
     runs-on: ubuntu-24.04

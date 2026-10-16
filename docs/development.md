@@ -6,7 +6,7 @@
 
 - Git.
 - Python 3.12+ and uv. The production installer pins its uv tool version; local development should use a uv version that supports the committed lock.
-- Node.js 22.12+ recommended for this build, and pnpm 10.17.1 as declared in `frontend/package.json`. The installer also accepts Node 20.19+, excludes Node 21, and accepts newer major versions; acceptance is not full-platform validation.
+- Node.js 22 LTS (22.13+) and pnpm 10.17.1, as declared in `frontend/package.json`. Node 20 and 21 are unsupported. CI validates the minimum and current Node 22 versions; newer majors accepted by the installer are not fully validated.
 - FFmpeg with SRT and the required encoders for media checks. Full service and streaming validation requires the Ubuntu runtime.
 
 ## Clone and install locked dependencies

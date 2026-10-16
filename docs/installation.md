@@ -67,7 +67,7 @@ sudo apt-get install -y \
   git curl ca-certificates ffmpeg python3 python3-venv build-essential acl rsync
 ```
 
-Install Node.js 22.12 or newer and `pnpm` (Node 20 requires at least 20.19; Node 21 is unsupported):
+Install Node.js 22 LTS (22.13 or newer) and `pnpm`. Node 20 and 21 are unsupported:
 
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
