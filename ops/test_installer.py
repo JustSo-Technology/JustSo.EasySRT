@@ -188,6 +188,11 @@ CONFIG_DIR="$TMPDIR/config"
 ENV_FILE="$CONFIG_DIR/easysrt.env"
 BACKEND_DIR="$TMPDIR/backend"
 mkdir -p "$BACKEND_DIR"
+# A retry preserves an existing LAN binding; fresh installs default to local.
+if [[ "$TEST_FRONTEND_HOST" == 0.0.0.0 ]]; then
+  mkdir -p "$CONFIG_DIR"
+  printf 'EASYSRT_FRONTEND_HOST=0.0.0.0\nEASYSRT_FRONTEND_PORT=8090\n' > "$ENV_FILE"
+fi
 PRIMARY_IP=192.0.2.10
 FRONTEND_HOST="$TEST_FRONTEND_HOST"
 INSTALLING_USER=test-user
@@ -255,13 +260,61 @@ INSTALL_SUCCEEDED=true
                 if slave is not None:
                     os.close(slave)
 
+    def test_yes_no_prompts_show_defaults_accept_words_and_retry_invalid_input(self):
+        cases = [('y', '\n', 'yes', 'Y/n'), ('n', '\n', 'no', 'y/N'),
+                 ('y', 'no\n', 'no', 'Y/n'), ('n', 'YES\n', 'yes', 'y/N'),
+                 ('y', 'maybe\nyes\n', 'yes', 'Y/n')]
+        for default, answer, expected, label in cases:
+            with self.subTest(answer=answer, default=default), tempfile.TemporaryDirectory() as directory:
+                body = DEFINITIONS + f"""
+init_logging
+if prompt_yes_no_default 'Keep access local?' {default}; then selected=yes; else selected=no; fi
+printf 'selected=%s\\n' "$selected"
+INSTALL_SUCCEEDED=true
+"""
+                master, slave = pty.openpty()
+                try:
+                    process = subprocess.Popen(['bash', '-c', body], stdin=slave,
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                        env={**os.environ, 'TMPDIR': directory})
+                    os.close(slave)
+                    slave = None
+                    os.write(master, answer.encode())
+                    stdout, stderr = process.communicate(timeout=10)
+                    self.assertEqual(process.returncode, 0, stderr)
+                    self.assertIn(f'Keep access local? [{label}]:', stderr)
+                    self.assertIn(f'selected={expected}', stdout)
+                    if 'maybe' in answer:
+                        self.assertIn('Please answer yes or no.', stderr)
+                finally:
+                    os.close(master)
+                    if slave is not None:
+                        os.close(slave)
+
+    def test_progress_reports_activity_and_cleans_up(self):
+        # Use a fast heartbeat in this fixture; production reports every 15s.
+        definitions = DEFINITIONS.replace('report_interval = 15', 'report_interval = 0.05')
+        with tempfile.TemporaryDirectory() as directory:
+            body = definitions + r"""
+init_logging
+STEP_TITLE=long-test-step
+run_logged sleep 0.5
+[[ -z "$PROGRESS_PID" ]]
+INSTALL_SUCCEEDED=true
+"""
+            result = self.run_shell(body, {'TMPDIR': directory})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('Still working: long-test-step', result.stdout)
+
     def test_cleanup_failure_does_not_mask_original_status(self):
         body = '''
 exec 3>&1 4>&2
+PROGRESS_PID=""
+PROGRESS_FLAG=""
 INSTALL_SUCCEEDED=true
 TRUSTED_TMP=/unused-test-path
 sudo() { return 7; }
-''' + function('install-ubuntu.sh', 'on_exit') + '\ntrap on_exit EXIT\nexit 23\n'
+''' + function('install-ubuntu.sh', 'stop_progress') + function('install-ubuntu.sh', 'on_exit') + '\ntrap on_exit EXIT\nexit 23\n'
         result = self.run_shell(body)
         self.assertEqual(result.returncode, 23)
         self.assertIn('Could not remove temporary source', result.stderr)

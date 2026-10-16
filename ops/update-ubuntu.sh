@@ -664,9 +664,9 @@ ENVUPDATE
 
 install_frontend() {
   info "Refreshing frontend dependencies"
-  sudo -u "${APP_USER}" bash -lc "cd '${FRONTEND_DIR}' && pnpm install --frozen-lockfile" || return 1
+  sudo -u "${APP_USER}" env COREPACK_ENABLE_DOWNLOAD_PROMPT=0 CI=1 bash -lc "cd '${FRONTEND_DIR}' && pnpm install --frozen-lockfile" || return 1
   info "Building production frontend"
-  sudo -u "${APP_USER}" bash -lc "cd '${FRONTEND_DIR}' && pnpm build" || return 1
+  sudo -u "${APP_USER}" env COREPACK_ENABLE_DOWNLOAD_PROMPT=0 CI=1 bash -lc "cd '${FRONTEND_DIR}' && pnpm build" || return 1
   record_log "Frontend build refreshed."
   ok "Frontend build refreshed."
 }
