@@ -1,0 +1,149 @@
+{
+  "passed": true,
+  "policy": {
+    "startup_seconds": 15.0,
+    "input_stall_seconds": 3.0,
+    "output_stall_seconds": 3.0,
+    "io_timeout_seconds": 2.0,
+    "retry_initial_seconds": 1.0,
+    "retry_max_seconds": 2.0,
+    "stable_seconds": 5.0
+  },
+  "cases": [
+    {
+      "video": false,
+      "fault": "input_stall",
+      "passed": true,
+      "reason": "input_error",
+      "detection_seconds": 7.042,
+      "restore_seconds": 7.156,
+      "attempts": 2,
+      "decoded_audio_bytes": 290304,
+      "applied_configuration_preserved": true
+    },
+    {
+      "video": false,
+      "fault": "input_disconnect",
+      "passed": true,
+      "reason": "input_error",
+      "detection_seconds": 4.827,
+      "restore_seconds": 7.159,
+      "attempts": 2,
+      "decoded_audio_bytes": 276480,
+      "applied_configuration_preserved": true
+    },
+    {
+      "video": false,
+      "fault": "output_stall",
+      "passed": true,
+      "reason": "output_error",
+      "detection_seconds": 6.335,
+      "restore_seconds": 7.155,
+      "attempts": 2,
+      "decoded_audio_bytes": 290304,
+      "applied_configuration_preserved": true
+    },
+    {
+      "video": false,
+      "fault": "output_disconnect",
+      "passed": true,
+      "reason": "output_error",
+      "detection_seconds": 0.366,
+      "restore_seconds": 7.157,
+      "attempts": 2,
+      "decoded_audio_bytes": 290304,
+      "applied_configuration_preserved": true
+    },
+    {
+      "video": false,
+      "fault": "hung_child",
+      "passed": true,
+      "reason": "media_stalled",
+      "detection_seconds": 3.021,
+      "restore_seconds": 10.983,
+      "attempts": 2,
+      "decoded_audio_bytes": 276480,
+      "applied_configuration_preserved": true
+    },
+    {
+      "video": true,
+      "fault": "input_stall",
+      "passed": true,
+      "reason": "input_error",
+      "detection_seconds": 6.943,
+      "restore_seconds": 7.074,
+      "attempts": 2,
+      "decoded_audio_bytes": 248832,
+      "applied_configuration_preserved": true
+    },
+    {
+      "video": true,
+      "fault": "input_disconnect",
+      "passed": true,
+      "reason": "input_error",
+      "detection_seconds": 4.932,
+      "restore_seconds": 7.11,
+      "attempts": 2,
+      "decoded_audio_bytes": 262656,
+      "applied_configuration_preserved": true
+    },
+    {
+      "video": true,
+      "fault": "output_stall",
+      "passed": true,
+      "reason": "output_error",
+      "detection_seconds": 5.738,
+      "restore_seconds": 7.015,
+      "attempts": 2,
+      "decoded_audio_bytes": 262656,
+      "applied_configuration_preserved": true
+    },
+    {
+      "video": true,
+      "fault": "output_disconnect",
+      "passed": true,
+      "reason": "output_error",
+      "detection_seconds": 0.436,
+      "restore_seconds": 7.064,
+      "attempts": 2,
+      "decoded_audio_bytes": 248832,
+      "applied_configuration_preserved": true
+    },
+    {
+      "video": true,
+      "fault": "hung_child",
+      "passed": true,
+      "reason": "media_stalled",
+      "detection_seconds": 3.019,
+      "restore_seconds": 11.037,
+      "attempts": 2,
+      "decoded_audio_bytes": 235008,
+      "applied_configuration_preserved": true
+    },
+    {
+      "fault": "stop_during_backoff",
+      "passed": true,
+      "attempts": 1
+    },
+    {
+      "fault": "finite_file_with_video",
+      "passed": true,
+      "attempts": 1,
+      "decoded_audio_bytes": 331776
+    },
+    {
+      "fault": "persistent_failure",
+      "passed": true,
+      "retry_delays": [
+        0.864,
+        1.792,
+        1.858
+      ]
+    },
+    {
+      "fault": "second_instance_isolation",
+      "passed": true,
+      "attempts": 1
+    }
+  ]
+}

@@ -92,6 +92,28 @@ jobs:
       - name: Validate candidate release metadata
         run: bash tools/release-check.sh "v$(node -p "require('./frontend/package.json').version")"
 
+  media-recovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v7
+      - name: Install the Ubuntu media runtime
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install locked backend dependencies
+        run: uv sync --project backend --locked
+      - name: Prove independent media signals
+        run: python3 ops/validate-telemetry.py --report /tmp/easysrt-telemetry.json
+      - name: Exercise real media faults and recovery
+        run: uv run --project backend python ops/validate-recovery.py --report /tmp/easysrt-recovery.json
+      - name: Check shipping timeout defaults
+        run: uv run --project backend python ops/validate-recovery.py --defaults --fault input_stall --report /tmp/easysrt-defaults.json
+      - name: Exercise isolated systemd and helper controls
+        run: uv run --project backend python ops/validate-service-recovery.py --report /tmp/easysrt-service-recovery.json
+
   secrets:
     runs-on: ubuntu-24.04
     steps:

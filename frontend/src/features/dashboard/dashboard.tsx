@@ -1,4 +1,5 @@
 import { AlertTriangle, ArrowUpRight, Play, RotateCcw, ShieldAlert, Square } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -8,6 +9,8 @@ export function Dashboard({
   config,
   activeSavedConfig,
   status,
+  statusUnavailable = false,
+  statusUpdatedAt,
   redundancy,
   onAction,
   actionError,
@@ -16,12 +19,30 @@ export function Dashboard({
   config: ConfigBundle;
   activeSavedConfig?: SavedSiteConfigSummary | null;
   status?: ServiceStatus;
+  statusUnavailable?: boolean;
+  statusUpdatedAt?: number;
   redundancy?: RedundancyStatus;
   onAction: (action: "start" | "stop" | "restart") => Promise<void>;
   actionError?: string | null;
   isActionPending: boolean;
 }) {
   const allowedActions = new Set(status?.allowed_actions ?? []);
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const media = status?.media;
+  const unavailable = statusUnavailable || (statusUpdatedAt !== undefined && now - statusUpdatedAt > 7000);
+  const mediaState = unavailable ? "unknown" : media?.state ?? "unknown";
+  const stateLabel = mediaState === "healthy" ? "Healthy · local media progressing" : mediaState.charAt(0).toUpperCase() + mediaState.slice(1);
+  const retrySeconds = media?.next_retry_at ? Math.max(0, Math.ceil((Date.parse(media.next_retry_at) - now) / 1000)) : null;
+  const applied = mediaState === "stopped" ? undefined : media?.summary;
+  const routeDescription = mediaState === "stopped"
+    ? "Saved configuration for the next Start."
+    : applied?.endpoint
+      ? mediaState === "unknown" ? "Last observed applied route; waiting for fresh sender evidence." : "Applied route for the current sender."
+      : "Saved configuration. The applied live route is unverified.";
 
   return (
     <div className="space-y-6">
@@ -33,27 +54,56 @@ export function Dashboard({
               <p className="section-label">Stream Control</p>
               <h2 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-white">{config.app.station_name}</h2>
               <p className="soft-text mt-3 max-w-xl text-sm leading-6">
-                Live routing and transport summary for the active sender.
+                {routeDescription}
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.18em] text-slate-200">
-                  {activeSavedConfig ? `Active config: ${activeSavedConfig.name}` : "Active config: unsaved live changes"}
+                  {activeSavedConfig ? `Selected config: ${activeSavedConfig.name}` : "Selected config: custom settings"}
                 </span>
               </div>
             </div>
             <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-100">
-              {status?.running ? "Streaming now" : status?.status ?? "Unknown"}
+              {stateLabel}
             </div>
           </div>
           <dl className="grid gap-4 md:grid-cols-2">
-            <Metric label="Input" value={`${config.site.input.name} · ${config.site.input.url}`} />
+            <Metric label="Input" value={applied?.input ?? `${config.site.input.name} · ${config.site.input.url}`} />
             <Metric
               label="Destination"
-              value={`${config.site.destination.protocol}://${formatDestinationHost(config.site.destination.host)}:${config.site.destination.port}`}
+              value={applied?.endpoint ?? `${config.site.destination.protocol}://${formatDestinationHost(config.site.destination.host)}:${config.site.destination.port}`}
             />
-            <Metric label="Profile" value={config.site.profile.name} />
-            <Metric label="Mux Rate" value={`${config.site.profile.mux_rate_kbps} kbps`} />
+            <Metric label="Profile" value={applied?.profile ?? config.site.profile.name} />
+            <Metric label="Remote receipt" value="Unverified · confirm audio at the receiver" />
           </dl>
+          <div role="status" className="space-y-2 rounded-[24px] border border-white/10 bg-black/20 p-4 text-sm text-slate-200">
+            <p>{unavailable ? "Status is unavailable or stale. Refreshing sender evidence…" : media?.detail ?? "Media health is unavailable; process activity alone does not establish streaming."}</p>
+            {!unavailable && media ? (
+              <>
+                {mediaState !== "stopped" ? <>
+                  <p>Source audio: {media.input.value.toLocaleString()} samples · {progressAge(media.input.age_seconds)}</p>
+                  <p>Local output: {media.output.value.toLocaleString()} bytes · {progressAge(media.output.age_seconds)}</p>
+                </> : null}
+                {mediaState === "retrying" ? <p>Retry {media.retry_count} · {retrySeconds === 0 ? "reconnecting…" : `next attempt in ${retrySeconds ?? "…"}s`}</p> : null}
+                {media.last_recovery_at ? <p>Last recovery: {new Date(media.last_recovery_at).toLocaleString()}</p> : null}
+                {media.policy.input_stall_seconds ? <p className="soft-text">Automatic recovery: input deadline {media.policy.input_stall_seconds}s, output deadline {media.policy.output_stall_seconds}s, retry delay up to {media.policy.retry_max_seconds}s.</p> : null}
+              </>
+            ) : null}
+          </div>
+          {media?.pending_config ? (
+            <p className="rounded-[24px] border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-50">
+              Saved settings are waiting for Restart. Automatic retries keep the applied route shown above.
+            </p>
+          ) : null}
+          {media?.events.length ? (
+            <details className="rounded-[24px] border border-white/10 p-4 text-sm text-slate-200">
+              <summary className="cursor-pointer">Recent recovery history</summary>
+              <ul className="mt-3 space-y-2">
+                {media.events.slice(-5).reverse().map((event, index) => (
+                  <li key={`${event.at}-${index}`}>{new Date(event.at).toLocaleString()} · {event.state} · {event.reason.replaceAll("_", " ")} · attempt {event.attempt}</li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
           <div className="flex flex-wrap gap-3">
             <Button className="gap-2" onClick={() => onAction("start")} disabled={isActionPending || !allowedActions.has("start")}>
               <Play size={16} />
@@ -111,6 +161,10 @@ export function Dashboard({
       </div>
     </div>
   );
+}
+
+function progressAge(seconds: number | null) {
+  return seconds === null ? "waiting for media" : `last progress ${Math.floor(seconds)}s ago`;
 }
 
 function RedundancyOverview({ redundancy }: { redundancy: RedundancyStatus }) {

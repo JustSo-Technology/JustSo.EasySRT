@@ -1,8 +1,10 @@
 import json
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 import shlex
 import tempfile
+from urllib.parse import urlsplit
 
 from fastapi import HTTPException, status
 from sqlmodel import Session, select
@@ -58,12 +60,16 @@ def _atomic_write(path: Path, content: str) -> None:
 def build_runtime_config(app_config: AppConfig, site_config: SiteConfig) -> RuntimeConfig:
     profile = site_config.profile
     destination = site_config.destination
-    args = [
-        settings.ffmpeg_binary,
-        "-re",
-        "-i",
-        site_config.input.url,
-    ]
+    scheme = urlsplit(site_config.input.url).scheme
+    policy = settings.recovery
+    if site_config.destination.protocol == "srt" and profile.srt_latency_ms / 1000 >= min(
+        policy.startup_seconds, policy.output_stall_seconds, policy.io_timeout_seconds
+    ):
+        raise ValueError("SRT latency must be shorter than recovery startup, output-stall and I/O timeouts")
+    args = [settings.ffmpeg_binary, "-re"]
+    if scheme != "file":
+        args.extend(["-rw_timeout", str(int(policy.io_timeout_seconds * 1_000_000))])
+    args.extend(["-i", site_config.input.url])
     if profile.enable_video:
         if profile.video_source == "black_test_frames":
             args.extend(
@@ -115,29 +121,45 @@ def build_runtime_config(app_config: AppConfig, site_config: SiteConfig) -> Runt
         )
     args.extend(
         [
+            "-shortest",
+            "-flush_packets",
+            "1",
             "-f",
             "mpegts",
             "-muxrate",
             f"{profile.mux_rate_kbps}k",
             "-pcr_period",
             str(profile.pcr_period_ms),
-            _destination_url(destination, profile.srt_latency_ms),
         ]
     )
+    args.extend(["-rw_timeout", str(int(policy.io_timeout_seconds * 1_000_000)),
+                 _destination_url(destination, profile.srt_latency_ms, profile.mux_rate_kbps)])
     ffmpeg_command = shlex.join(args)
+    summary = {"input": site_config.input.name, "destination": destination.name,
+               "endpoint": f"{destination.protocol}://{_format_host_for_url(destination.host)}:{destination.port}",
+               "profile": profile.name}
+    config_id = hashlib.sha256(json.dumps({"args": args, "policy": policy.model_dump(), "summary": summary}, sort_keys=True).encode()).hexdigest()
     return RuntimeConfig(
         ffmpeg_command=ffmpeg_command,
         service_name=settings.sender_service_name,
         generated_from_station=app_config.station_name,
         sender_env_path=str(settings.sender_env_path.resolve()),
+        ffmpeg_args=args,
+        input_scheme=scheme,
+        recovery=policy,
+        config_id=config_id,
+        summary=summary,
     )
 
 
-def _destination_url(destination: Destination, latency_ms: int) -> str:
+def _destination_url(destination: Destination, latency_ms: int, mux_rate_kbps: int = 600) -> str:
     endpoint = _format_host_for_url(destination.host)
     if destination.protocol == "udp":
         return f"udp://{endpoint}:{destination.port}"
-    return f"srt://{endpoint}:{destination.port}?mode=caller&latency={latency_ms * 1000}"
+    # Bound queued media and let sustained backpressure surface as a blocked
+    # write instead of silently discarding late packets indefinitely.
+    send_buffer = max(262144, int(mux_rate_kbps * 125 * max(1, latency_ms / 500)))
+    return f"srt://{endpoint}:{destination.port}?mode=caller&latency={latency_ms * 1000}&sndbuf={send_buffer}&tlpktdrop=0"
 
 
 def _format_host_for_url(host: str) -> str:
@@ -161,12 +183,30 @@ def load_bundle() -> ConfigBundle:
 
 
 def save_bundle(app_config: AppConfig, site_config: SiteConfig) -> ConfigBundle:
-    runtime = build_runtime_config(app_config, site_config)
+    try:
+        runtime = build_runtime_config(app_config, site_config)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     _write_json(settings.app_config_path, app_config.model_dump())
     _write_json(settings.site_config_path, site_config.model_dump())
     _write_json(settings.runtime_config_path, runtime.model_dump())
     _write_sender_env(settings.sender_env_path, runtime.ffmpeg_command)
     return ConfigBundle(app=app_config, site=site_config, runtime=runtime)
+
+
+def migrate_legacy_runtime() -> None:
+    """Refresh legacy candidates or changed host policy, never an applied run."""
+    try:
+        payload = _read_json(settings.runtime_config_path)
+        if isinstance(payload, dict) and payload.get("ffmpeg_command") and (
+            "ffmpeg_args" not in payload or payload.get("recovery") != settings.recovery.model_dump()
+        ):
+            bundle = load_bundle()
+            save_bundle(bundle.app, bundle.site)
+    except (OSError, ValueError, HTTPException):
+        # Leave malformed candidates for diagnostics/preflight; keep the API
+        # available and never attempt to repair an active process implicitly.
+        return
 
 
 def _saved_config_summary(record: SavedSiteConfigRecord, is_active: bool = False) -> SavedSiteConfigSummary:

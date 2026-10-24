@@ -80,6 +80,26 @@ export interface ServiceStatus {
   last_command: string | null;
   last_exit_code: number | null;
   stderr_tail: string | null;
+  media?: SenderHealth;
+}
+
+export interface SenderHealth {
+  state: "stopped" | "connecting" | "healthy" | "degraded" | "retrying" | "unknown";
+  reason: string;
+  detail: string;
+  summary: Record<string, string>;
+  input: { value: number; age_seconds: number | null; last_progress_at: string | null };
+  output: { value: number; age_seconds: number | null; last_progress_at: string | null };
+  attempt: number;
+  retry_count: number;
+  next_retry_at: string | null;
+  last_failure_at: string | null;
+  last_recovery_at: string | null;
+  heartbeat_at: string | null;
+  pending_config: boolean;
+  remote_receipt: "unverified";
+  policy: Record<string, number>;
+  events: Array<{ at: string; state: string; reason: string; attempt: number }>;
 }
 
 export interface RedundancyNodeSummary {

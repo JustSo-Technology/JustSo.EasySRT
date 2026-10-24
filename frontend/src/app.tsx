@@ -68,6 +68,8 @@ export default function App() {
     queryKey: ["service-status"],
     queryFn: api.getServiceStatus,
     enabled: isAuthenticated,
+    refetchInterval: 2000,
+    retry: 1,
   });
 
   const diagnosticsQuery = useQuery({
@@ -354,6 +356,8 @@ export default function App() {
             config={configQuery.data}
             activeSavedConfig={savedConfigsQuery.data?.find((savedConfig) => savedConfig.is_active) ?? null}
             status={statusQuery.data}
+            statusUnavailable={statusQuery.isError}
+            statusUpdatedAt={statusQuery.dataUpdatedAt}
             redundancy={redundancyQuery.data}
             onAction={(action) => serviceMutation.mutateAsync(action).then(() => undefined)}
             actionError={serviceActionError}

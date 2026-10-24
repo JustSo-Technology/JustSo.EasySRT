@@ -9,6 +9,8 @@ from app.models.auth import User
 from app.schemas.system import DiagnosticCheck, ServiceStatus
 from app.services.health_checks import collect_preflight_checks
 from app.services.host_control import HostControlError, request_helper
+from app.services.sender_health import read_sender_health
+from app.services.config_service import load_bundle
 
 
 @dataclass
@@ -49,9 +51,9 @@ def _allowed_actions_for_status(service_state: str, preflight_ok: bool) -> list[
         if preflight_ok:
             actions.append("restart")
         return actions
-    if service_state == "activating":
+    if service_state in {"activating", "deactivating"}:
         return ["stop"]
-    if service_state in {"inactive", "failed", "deactivating", "unknown", "unavailable"}:
+    if service_state in {"inactive", "failed"}:
         return ["start"] if preflight_ok else []
     return []
 
@@ -79,11 +81,11 @@ def _service_status_from_result(
     )
 
 
-def _read_service_state(user: User | None) -> tuple[str, str]:
+def _read_service_state(user: User | None) -> tuple[str, str, dict]:
     try:
         result = request_helper("sender_status", actor=user)
     except HostControlError as exc:
-        return "unavailable", f"platform={sys.platform}; env={Path(settings.sender_env_path).resolve()}; service={settings.sender_service_name}; helper_error={exc.message}"
+        return "unavailable", f"platform={sys.platform}; env={Path(settings.sender_env_path).resolve()}; service={settings.sender_service_name}; helper_error={exc.message}", {}
 
     service_state = result.get("service_state") or "unknown"
     stdout = str(result.get("stdout") or "")
@@ -93,13 +95,17 @@ def _read_service_state(user: User | None) -> tuple[str, str]:
         detail = f"{detail}; state_error={stderr}"
     elif stdout and stdout != service_state:
         detail = f"{detail}; state_output={stdout}"
-    return service_state, detail
+    return service_state, detail, result
 
 
 def _snapshot_status(user: User | None = None, *, context: CommandContext | None = None) -> ServiceStatus:
     checks = collect_preflight_checks()
-    service_state, detail = _read_service_state(user)
-    return _service_status_from_result(service_state, detail, checks=checks, context=context)
+    service_state, detail, result = _read_service_state(user)
+    snapshot = _service_status_from_result(service_state, detail, checks=checks, context=context)
+    snapshot.media = read_sender_health(service_state, result)
+    if snapshot.media.config_id and snapshot.preflight_ok and service_state in {"active", "activating"}:
+        snapshot.media.pending_config = snapshot.media.config_id != load_bundle().runtime.config_id
+    return snapshot
 
 
 def get_service_status(user: User | None = None) -> ServiceStatus:
@@ -111,14 +117,14 @@ def _raise_action_failure(status_code: int, snapshot: ServiceStatus) -> None:
 
 
 def _validate_transition(action: str, snapshot: ServiceStatus) -> None:
-    if action == "start" and snapshot.status == "active":
+    if action in {"start", "restart"} and not snapshot.preflight_ok:
+        _raise_action_failure(status.HTTP_424_FAILED_DEPENDENCY, snapshot)
+    if action == "start" and snapshot.status not in {"inactive", "failed"}:
         _raise_action_failure(status.HTTP_409_CONFLICT, snapshot)
-    if action == "stop" and snapshot.status not in {"active", "activating"}:
+    if action == "stop" and snapshot.status not in {"active", "activating", "deactivating"}:
         _raise_action_failure(status.HTTP_409_CONFLICT, snapshot)
     if action == "restart" and snapshot.status != "active":
         _raise_action_failure(status.HTTP_409_CONFLICT, snapshot)
-    if action in {"start", "restart"} and not snapshot.preflight_ok:
-        _raise_action_failure(status.HTTP_424_FAILED_DEPENDENCY, snapshot)
 
 
 def perform_service_action(action: str, user: User | None = None) -> ServiceStatus:
