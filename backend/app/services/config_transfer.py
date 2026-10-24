@@ -247,11 +247,11 @@ def _serializer():
     return URLSafeTimedSerializer(settings.secret_key, salt="easysrt-config-import-v1")
 
 
-def preview(session: Session, request: ImportRequest, user: User, principal=None):
+def preview(session: Session, request: ImportRequest, user: User, principal=None, token_id=None):
     items, warnings, errors = _plan(session, request)
     authorize_items(items, principal)
     state = _state(session)
-    token = _serializer().dumps({"user": user.id, "plan": _hash(items), "state": state,
+    token = _serializer().dumps({"user": user.id, "api_token": token_id, "plan": _hash(items), "state": state,
                                  "request": _hash({"document": request.document, "decisions": [d.model_dump() for d in request.decisions]})})
     public = [redact({k: v for k, v in item.items() if k not in {"payload", "target_id"}} | {"settings": item["payload"]}) for item in items]
     return {"items": public, "warnings": warnings, "errors": errors, "can_import": not errors and any(i["action"] != "skip" for i in items), "preview_token": token}
@@ -259,6 +259,9 @@ def preview(session: Session, request: ImportRequest, user: User, principal=None
 
 def authorize_items(items, principal):
     if principal is None:
+        return
+    if hasattr(principal, "authorize_import_items"):
+        principal.authorize_import_items(items)
         return
     for item in items:
         if item["action"] == "skip":
@@ -269,7 +272,7 @@ def authorize_items(items, principal):
             principal.require("inputs:create" if item["kind"] == "input" else "destinations:create")
 
 
-def commit_import(session: Session, request: ImportRequest, user: User, principal=None):
+def commit_import(session: Session, request: ImportRequest, user: User, principal=None, token_id=None):
     try:
         claims = _serializer().loads(request.preview_token or "", max_age=PREVIEW_TTL)
     except (BadSignature, SignatureExpired):
@@ -279,7 +282,7 @@ def commit_import(session: Session, request: ImportRequest, user: User, principa
     try:
         items, _, errors = _plan(session, request)
         authorize_items(items, principal)
-        expected = {"user": user.id, "plan": _hash(items), "state": _state(session),
+        expected = {"user": user.id, "api_token": token_id, "plan": _hash(items), "state": _state(session),
                     "request": _hash({"document": request.document, "decisions": [d.model_dump() for d in request.decisions]})}
         if claims != expected:
             invalid("Import or saved configuration changed; preview again", 409)
@@ -299,6 +302,9 @@ def commit_import(session: Session, request: ImportRequest, user: User, principa
                 record.created_by_user_id = user.id
             session.add(record)
             imported.append({"key": item["key"], "id": record.id, "kind": item["kind"], "name": redact(item["name"])})
+        if token_id is not None:
+            from app.services.api_tokens import audit
+            audit(session, user.id, "config:import", token_id=token_id, resource_id="library")
         session.commit()
         return {"imported": imported, "active_configuration_changed": False}
     except Exception:

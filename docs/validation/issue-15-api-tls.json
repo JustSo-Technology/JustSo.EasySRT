@@ -1,0 +1,26 @@
+{
+  "environment": "isolated localhost TLS uvicorn; production security settings; no host helper",
+  "tls_verification": "fixture CA trusted explicitly, verification enabled; no system trust changes",
+  "cases": [
+    {
+      "case": "verified_tls_and_owner_session_csrf_issuance",
+      "passed": true
+    },
+    {
+      "case": "bearer_health_metrics_spec_and_scope_legacy_denials",
+      "passed": true
+    },
+    {
+      "case": "one_time_secret_absent_from_metadata_database_and_audit",
+      "passed": true
+    },
+    {
+      "case": "rotation_and_revocation_take_effect_over_live_tls",
+      "passed": true
+    },
+    {
+      "case": "credentials_absent_from_access_logs",
+      "passed": true
+    }
+  ]
+}

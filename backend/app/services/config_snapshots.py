@@ -211,6 +211,7 @@ def apply_preset(principal, preset_id, payload):
         raise HTTPException(428, "Review the preset and selected configuration before Apply")
     request_hash = digest({**payload.model_dump(exclude={"request_id"}), "preset_id": preset_id, "actor": principal.user.id})
     with target_lock(), Session(get_engine()) as session:
+        principal.require("presets:apply", preset_id=preset_id, target=payload.target)
         previous = recover(session)
         session.connection().exec_driver_sql("BEGIN IMMEDIATE")
         replay = session.exec(select(ConfigSnapshot).where(ConfigSnapshot.request_id == payload.request_id)).first()

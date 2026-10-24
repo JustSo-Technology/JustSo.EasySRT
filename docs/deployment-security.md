@@ -74,3 +74,13 @@ service-account-writable updater cannot safely bootstrap this boundary. Run
 manual updates with `sudo /usr/local/lib/justso-easysrt/update-ubuntu.sh`.
 Installation, update and rollback require a committed backend `uv.lock` and
 use `uv sync --locked --no-dev`; an absent or stale lock fails the deployment.
+
+## Scoped API credentials
+
+The v1 integration API and token administration require HTTPS even when LAN HTTP
+is enabled for the browser UI. Publish through trusted TLS ingress and keep the
+backend private. For a remote ingress configure
+`EASYSRT_FRONTEND_TRUSTED_PROXY_CIDRS` to its actual CIDRs; the default trusts only
+loopback. Forwarded scheme/client headers from other peers are discarded.
+Use the [scoped API guide](scoped-api.md) for issuer recovery, resource grants,
+expiry, rotation, quotas and audit retention. Do not clone credential databases.

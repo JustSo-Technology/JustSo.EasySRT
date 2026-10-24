@@ -397,3 +397,31 @@ export const api = {
     }),
   getUpdateJob: () => request<UpdateJobStatus>("/api/update/job"),
 };
+
+export interface ScopeGrant { scope: string; kind: string; resource_id: string; target: string | null }
+export interface TokenCatalogue {
+  instance_id: string;
+  scopes: Array<{ id: string; group: string; kind: string; minimum_role: UserRole; description?: string }>;
+  presets: Array<{ id: string; version: number; grants: ScopeGrant[] }>;
+  resources: Record<string, Array<{ id: string; name: string }>>;
+  endpoints: Record<string, string[]>;
+}
+export interface IntegrationToken {
+  id: string; name: string; integration: string; owner_id: string; creator_id: string; instance_id: string;
+  preset: string; preset_version: number; preset_customized?: boolean; revision: number; grants: ScopeGrant[]; effective_grants: ScopeGrant[];
+  status: string; created_at: string; expires_at: string; revoked_at: string | null; last_used_at: string | null;
+  credentials: Array<{ id: string; prefix: string; created_at: string; last_used_at: string | null; retire_at: string | null; revoked_at: string | null }>;
+}
+export interface TokenAudit { id: string; action: string; outcome: string; created_at: string; actor_id: string; request_id: string }
+export const tokenApi = {
+  catalogue: () => request<TokenCatalogue>('/api/v1/token-catalogue'),
+  list: (offset = 0) => request<{ items: IntegrationToken[] }>(`/api/v1/tokens?limit=100&offset=${offset}`),
+  create: (body: { name: string; integration: string; owner_id: string; grants: ScopeGrant[]; expires_at: string; preset: string; current_password: string }) =>
+    request<{ token: IntegrationToken; secret: string }>('/api/v1/tokens', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: string, body: { name: string; grants: ScopeGrant[]; expires_at: string; expected_revision: number; current_password: string }) =>
+    request<IntegrationToken>(`/api/v1/tokens/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  rotate: (id: string, body: { expected_revision: number; overlap_seconds: number; current_password: string }) =>
+    request<{ token: IntegrationToken; secret: string }>(`/api/v1/tokens/${id}/rotate`, { method: 'POST', body: JSON.stringify(body) }),
+  revoke: (ids: string[]) => request<{ revoked_ids: string[] }>('/api/v1/tokens/revoke', { method: 'POST', body: JSON.stringify({ ids }) }),
+  audit: (id: string) => request<{ items: TokenAudit[] }>(`/api/v1/tokens/${id}/audit-events`),
+};

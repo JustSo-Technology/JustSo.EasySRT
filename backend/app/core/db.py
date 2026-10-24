@@ -7,6 +7,7 @@ import tempfile
 from sqlmodel import Session, SQLModel, create_engine
 
 from app.core.settings import settings
+from app.models.api_token import ApiIdentity, ApiToken, ApiCredential, ApiAudit, ApiCommand
 from app.models.auth import SessionRecord, User
 from app.models.redundancy import PartnerSyncState, ReplicatedConfigState, ReplicatedConfigVersionRecord
 from app.models.site_config import SavedDestinationRecord, SavedInputRecord, SavedSiteConfigRecord, SiteConfigState, ConfigSnapshot, SelectedConfigState
@@ -72,6 +73,13 @@ def init_db() -> None:
         connection.execute("INSERT OR IGNORE INTO schema_migration VALUES (1)")
         connection.commit()
     SQLModel.metadata.create_all(get_engine())
+    settings.sqlite_path.chmod(0o600)
+    with Session(get_engine()) as session:
+        session.connection().exec_driver_sql("BEGIN IMMEDIATE")
+        if session.get(ApiIdentity, "local") is None:
+            session.add(ApiIdentity())
+        session.connection().exec_driver_sql("INSERT OR IGNORE INTO schema_migration VALUES (2)")
+        session.commit()
 
 
 def get_session():

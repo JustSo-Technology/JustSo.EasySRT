@@ -19,7 +19,7 @@ class HostControlError(Exception):
 def _actor_payload(user: User | None) -> dict[str, str | None]:
     if user is None:
         return {"id": None, "username": None, "role": None}
-    return {"id": user.id, "username": user.username, "role": str(user.role)}
+    return {"id": user.id, "username": user.username, "role": str(user.role), **({"api_token_id": user.api_token_id} if getattr(user, "api_token_id", None) else {})}
 
 
 def request_helper(action: str, *, actor: User | None, payload: dict[str, Any] | None = None) -> dict[str, Any]:
