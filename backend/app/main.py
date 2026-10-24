@@ -9,13 +9,13 @@ from app.api import auth, config, config_transfer, diagnostics, logs, redundancy
 from app.core.db import init_db
 from app.core.settings import settings
 from app.services.security import decode_session_token, verify_csrf_token
-from app.services.config_service import migrate_legacy_runtime
+from app.services.config_snapshots import migrate_selection
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
-    migrate_legacy_runtime()
+    migrate_selection()
     yield
 
 
@@ -55,6 +55,8 @@ async def security_middleware(request: Request, call_next):
                 )
 
     response = await call_next(request)
+    if request.url.path.startswith(("/api/config", "/api/service")):
+        response.headers["Cache-Control"] = "no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"

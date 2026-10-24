@@ -125,7 +125,7 @@ describe("API request contracts", () => {
     const { api } = await import("./api");
 
     await expect(
-      api.updateSiteConfig({
+      api.saveNamedSiteConfig("Invalid preset", {
         input: { name: "input", url: "https://example.com/live" },
         destination: { name: "output", protocol: "srt", host: "example.com", port: 70000 },
         profile: {

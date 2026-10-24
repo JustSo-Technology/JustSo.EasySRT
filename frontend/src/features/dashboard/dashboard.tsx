@@ -3,11 +3,10 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import type { ConfigBundle, RedundancyNodeSummary, RedundancyStatus, SavedSiteConfigSummary, ServiceStatus } from "@/lib/api";
+import type { ConfigBundle, RedundancyNodeSummary, RedundancyStatus, ServiceStatus } from "@/lib/api";
 
 export function Dashboard({
   config,
-  activeSavedConfig,
   status,
   statusUnavailable = false,
   statusUpdatedAt,
@@ -17,15 +16,15 @@ export function Dashboard({
   isActionPending,
 }: {
   config: ConfigBundle;
-  activeSavedConfig?: SavedSiteConfigSummary | null;
   status?: ServiceStatus;
   statusUnavailable?: boolean;
   statusUpdatedAt?: number;
   redundancy?: RedundancyStatus;
-  onAction: (action: "start" | "stop" | "restart") => Promise<void>;
+  onAction: (action: "start" | "stop" | "restart", expectedSelectionId?: string) => Promise<void>;
   actionError?: string | null;
   isActionPending: boolean;
 }) {
+  const [restartReview, setRestartReview] = useState<ConfigBundle["selected"]>(null);
   const allowedActions = new Set(status?.allowed_actions ?? []);
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
@@ -37,15 +36,30 @@ export function Dashboard({
   const mediaState = unavailable ? "unknown" : media?.state ?? "unknown";
   const stateLabel = mediaState === "healthy" ? "Healthy · local media progressing" : mediaState.charAt(0).toUpperCase() + mediaState.slice(1);
   const retrySeconds = media?.next_retry_at ? Math.max(0, Math.ceil((Date.parse(media.next_retry_at) - now) / 1000)) : null;
-  const applied = mediaState === "stopped" ? undefined : media?.summary;
+  const run = !unavailable ? status?.running_config : null;
+  const applied = mediaState === "stopped" || unavailable ? undefined : media?.summary;
+  const selected = config.selected;
+  const liveUnknown = mediaState !== "stopped" && !run;
   const routeDescription = mediaState === "stopped"
-    ? "Saved configuration for the next Start."
+    ? "Selected configuration for the next Start."
     : applied?.endpoint
       ? mediaState === "unknown" ? "Last observed applied route; waiting for fresh sender evidence." : "Applied route for the current sender."
-      : "Saved configuration. The applied live route is unverified.";
+      : "The running configuration is unknown. Selected settings do not establish what is on air.";
 
   return (
     <div className="space-y-6">
+      {restartReview ? (
+        <div role="dialog" aria-modal="true" aria-label="Review Restart" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
+          <Card className="max-w-xl space-y-4">
+            <h3 className="text-xl font-semibold">Restart will interrupt the stream</h3>
+            <p>Start selected preset {restartReview.source_name} · revision {restartReview.source_revision ?? "legacy"}. The current sender will stop first.</p>
+            <Button disabled={isActionPending} onClick={() => {
+              void onAction("restart", restartReview.id).then(() => setRestartReview(null)).catch(() => setRestartReview(null));
+            }}>Confirm Restart</Button>
+            <Button disabled={isActionPending} onClick={() => setRestartReview(null)}>Cancel</Button>
+          </Card>
+        </div>
+      ) : null}
       {redundancy ? <RedundancyOverview redundancy={redundancy} /> : null}
       <div className="grid gap-6 lg:grid-cols-[1.5fr_0.95fr]">
         <Card className="min-w-0 space-y-6">
@@ -58,21 +72,22 @@ export function Dashboard({
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.18em] text-slate-200">
-                  {activeSavedConfig ? `Selected config: ${activeSavedConfig.name}` : "Selected config: custom settings"}
+                  {selected ? `Selected: ${selected.source_name} · revision ${selected.source_revision ?? "legacy"}` : "No selected configuration"}
                 </span>
               </div>
+              <p className="mt-2 text-sm text-slate-300">Running configuration: {run?.selected ? `${run.selected.source_name} · revision ${run.selected.source_revision ?? "legacy"}` : mediaState === "stopped" ? "None — sender stopped" : "Unknown"}</p>
             </div>
             <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-100">
               {stateLabel}
             </div>
           </div>
           <dl className="grid gap-4 md:grid-cols-2">
-            <Metric label="Input" value={applied?.input ?? `${config.site.input.name} · ${config.site.input.url}`} />
+            <Metric label="Input" value={run?.site.input.name ?? applied?.input ?? (liveUnknown ? "Unknown" : config.site.input.name)} />
             <Metric
               label="Destination"
-              value={applied?.endpoint ?? `${config.site.destination.protocol}://${formatDestinationHost(config.site.destination.host)}:${config.site.destination.port}`}
+              value={applied?.endpoint ?? (liveUnknown ? "Unknown" : `${config.site.destination.protocol}://${formatDestinationHost(config.site.destination.host)}:${config.site.destination.port}`)}
             />
-            <Metric label="Profile" value={applied?.profile ?? config.site.profile.name} />
+            <Metric label="Profile" value={run?.site.profile.name ?? applied?.profile ?? (liveUnknown ? "Unknown" : config.site.profile.name)} />
             <Metric label="Remote receipt" value="Unverified · confirm audio at the receiver" />
           </dl>
           <div role="status" className="space-y-2 rounded-[24px] border border-white/10 bg-black/20 p-4 text-sm text-slate-200">
@@ -89,9 +104,9 @@ export function Dashboard({
               </>
             ) : null}
           </div>
-          {media?.pending_config ? (
+          {status?.pending_configuration ? (
             <p className="rounded-[24px] border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-50">
-              Saved settings are waiting for Restart. Automatic retries keep the applied route shown above.
+              Selected configuration is awaiting Start/Restart. Automatic retries keep the running configuration shown above.
             </p>
           ) : null}
           {media?.events.length ? (
@@ -105,13 +120,13 @@ export function Dashboard({
             </details>
           ) : null}
           <div className="flex flex-wrap gap-3">
-            <Button className="gap-2" onClick={() => onAction("start")} disabled={isActionPending || !allowedActions.has("start")}>
+            <Button className="gap-2" onClick={() => { void onAction("start", selected?.id).catch(() => undefined); }} disabled={isActionPending || !allowedActions.has("start") || !selected}>
               <Play size={16} />
               Start
             </Button>
             <Button
               className="gap-2 border-rose-300/20 bg-[linear-gradient(135deg,#f6c17a,#f38d7a)] text-slate-950 shadow-[0_10px_35px_rgba(243,141,122,0.18)] hover:shadow-[0_12px_40px_rgba(243,141,122,0.26)]"
-              onClick={() => onAction("stop")}
+              onClick={() => { void onAction("stop").catch(() => undefined); }}
               disabled={isActionPending || !allowedActions.has("stop")}
             >
               <Square size={16} />
@@ -119,8 +134,8 @@ export function Dashboard({
             </Button>
             <Button
               className="gap-2 border-white/10 bg-white/5 text-white shadow-none hover:bg-white/10 hover:text-white"
-              onClick={() => onAction("restart")}
-              disabled={isActionPending || !allowedActions.has("restart")}
+              onClick={() => setRestartReview(selected)}
+              disabled={isActionPending || !allowedActions.has("restart") || !selected}
             >
               <RotateCcw size={16} />
               Restart

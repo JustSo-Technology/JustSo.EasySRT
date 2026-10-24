@@ -20,6 +20,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 from app.core.settings import settings
 from app.schemas.config import AppConfig, SiteConfig
+from app.core.db import init_db
+from app.services.config_service import load_bundle
+from fastapi.testclient import TestClient
+from app.main import app
 from app.schemas.recovery import RecoveryPolicy
 from app.services.config_service import migrate_legacy_runtime, save_bundle
 from app.services.host_control import HostControlError, request_helper
@@ -61,6 +65,8 @@ def main():
         data.mkdir(parents=True)
         settings.app_root = app_root
         settings.data_dir = data
+        settings.sqlite_path = data / "easysrt.db"
+        init_db()
         settings.app_config_path, settings.site_config_path = data / "app_config.json", data / "site_config.json"
         settings.runtime_config_path, settings.sender_env_path = data / "runtime_config.json", data / "sender.env"
         settings.sender_service_name = sender_unit
@@ -75,6 +81,27 @@ def main():
             "destination": {"name": "Fixture receiver", "host": "127.0.0.1", "port": receiver.port},
             "profile": {"name": "Fixture profile"}})
         save_bundle(AppConfig(), site)
+        # Simulate an existing #14 run with no #16 snapshot identity.
+        (data / "applied_sender.json").write_bytes(settings.runtime_config_path.read_bytes())
+        legacy_applied = (data / "applied_sender.json").read_bytes()
+        api_client = TestClient(app)
+
+        def save_site(value):
+            response = api_client.post("/api/config/saved", json={"name": "Fixture " + uuid.uuid4().hex, "site": value.model_dump()})
+            assert response.status_code == 200, response.text
+            return response.json()["saved_config"]
+
+        def select_preset(preset):
+            detail = api_client.get(f"/api/config/saved/{preset['id']}").json()
+            body = {name: detail[name] for name in ["app_digest", "runtime_digest", "runtime_version", "expected_selection_id"]}
+            body.update(expected_revision=detail["saved_config"]["revision"], request_id=uuid.uuid4().hex)
+            response = api_client.post(f"/api/config/saved/{preset['id']}/apply", json=body)
+            assert response.status_code == 200, response.text
+            return response.json()
+
+        def start():
+            return perform_service_action("start", expected_selection_id=load_bundle().selected.id)
+
         sender_text = f"""[Unit]
 Description=EasySRT isolated recovery acceptance
 StartLimitIntervalSec=60
@@ -114,18 +141,41 @@ TimeoutStopSec=5
                 if settings.helper_socket_path.exists():
                     break
                 time.sleep(.1)
+            sudo("systemctl", "start", sender_unit)
+            legacy = wait_media("healthy")
+            assert legacy.running_config is None
+            # Start the upgraded control plane while the old sender is on air.
+            api_client.__enter__()
+            response = api_client.post("/api/auth/bootstrap-owner", json={"username": "rehearsal", "password": "isolated-fixture-password", "role": "owner"})
+            assert response.status_code == 200, response.text
+            api_client.headers["X-CSRF-Token"] = response.json()["csrf_token"]
+            select_preset(save_site(site))
+            assert get_service_status().media.supervisor_pid == legacy.media.supervisor_pid
+            assert get_service_status().running_config is None
+            assert (data / "applied_sender.json").read_bytes() == legacy_applied
+            events.append({"case": "upgrade_and_apply_preserve_legacy_run_with_unknown_identity", "passed": True})
+            perform_service_action("stop")
+            receiver.close()
+            receiver = fixture.Receiver(receiver.port)
             before = get_service_status()
             assert before.preflight_ok, before.model_dump()
             assert before.status == "inactive", before.model_dump()
-            perform_service_action("start")
+            start()
             initial = wait_media("healthy")
             original_config = initial.media.config_id
             assert receiver.bytes > 0
             changed = site.model_copy(update={"destination": site.destination.model_copy(update={"port": receiver.port + 1})})
-            save_bundle(AppConfig(), changed)
+            b = save_site(changed)
+            api_client.get(f"/api/config/saved/{b['id']}")
+            assert not get_service_status().media.pending_config
+            assert get_service_status().media.supervisor_pid == initial.media.supervisor_pid
+            events.append({"case": "save_and_open_preserve_live_and_selected", "passed": True})
+            select_preset(b)
             assert get_service_status().media.pending_config
+            assert get_service_status().media.supervisor_pid == initial.media.supervisor_pid
+            events.append({"case": "apply_only_selects_pending_configuration", "passed": True})
             try:
-                request_helper("sender_start", actor=None)
+                request_helper("sender_start", actor=None, payload={"expected_snapshot_id": load_bundle().selected.id})
             except HostControlError as exc:
                 assert exc.code == "invalid_transition"
             else:
@@ -133,10 +183,11 @@ TimeoutStopSec=5
             assert get_service_status().media.config_id == original_config
             source.mode = "stall"
             wait_media("retrying")
-            settings.runtime_config_path.unlink()
+            settings.ffmpeg_binary = "missing-fixture-ffmpeg"
             # Invalid candidate/preflight must never prevent an intentional Stop.
             stopped = perform_service_action("stop")
             assert stopped.status == "inactive" and not stopped.preflight_ok
+            settings.ffmpeg_binary = "ffmpeg"
             source.mode = "flow"
             time.sleep(3)
             assert get_service_status().status == "inactive"
@@ -144,11 +195,11 @@ TimeoutStopSec=5
 
             receiver.close()
             receiver = fixture.Receiver(receiver.port)
-            save_bundle(AppConfig(), site)
-            perform_service_action("start")
+            select_preset(save_site(site))
+            start()
             running = wait_media("healthy")
             # A crash restart must reuse the applied route despite saved edits.
-            save_bundle(AppConfig(), changed)
+            select_preset(save_site(changed))
             sudo("kill", "-KILL", running.media.supervisor_pid)
             receiver.close()
             receiver = fixture.Receiver(receiver.port)
@@ -158,7 +209,37 @@ TimeoutStopSec=5
             assert not Path(f"/proc/{running.media.supervisor_pid}").exists()
             assert running.media.child_pid and not Path(f"/proc/{running.media.child_pid}").exists()
             events.append({"case": "supervisor_crash_cgroup_cleanup_and_applied_runtime", "passed": True})
-            sender_pid = restarted.media.supervisor_pid
+            # Start/Restart binds the exact reviewed selected generation.
+            before_restart = get_service_status()
+            receiver_b = fixture.Receiver(changed.destination.port)
+            try:
+                replacement = perform_service_action("restart", expected_selection_id=load_bundle().selected.id)
+                new_run = wait_media("healthy")
+                assert new_run.media.snapshot_id == load_bundle().selected.id
+                assert new_run.media.supervisor_pid != before_restart.media.supervisor_pid
+                assert new_run.running_config.site.destination.port == receiver_b.port
+                deadline = time.monotonic() + 15
+                while receiver_b.bytes == 0 and time.monotonic() < deadline:
+                    time.sleep(.1)
+                assert receiver_b.bytes > 0
+                events.append({"case": "explicit_restart_uses_selected_revision_and_decodes_audio", "passed": True,
+                               "decoded_audio_bytes": receiver_b.bytes})
+                preset = save_site(changed)
+                selected_copy = select_preset(preset)
+                assert api_client.delete(f"/api/config/saved/{preset['id']}?expected_revision=1").status_code == 200
+                assert load_bundle().selected.id == selected_copy["selected"]["id"]
+                assert get_service_status().media.supervisor_pid == new_run.media.supervisor_pid
+                events.append({"case": "deleting_selected_preset_preserves_snapshots", "passed": True})
+            finally:
+                perform_service_action("stop")
+                receiver_b.close()
+            select_preset(save_site(site))
+            receiver.close()
+            receiver = fixture.Receiver(receiver.port)
+            start()
+            wait_media("healthy")
+
+            sender_pid = get_service_status().media.supervisor_pid
             sudo("systemctl", "restart", helper_unit)
             time.sleep(.5)
             assert wait_media("healthy").media.supervisor_pid == sender_pid
@@ -171,10 +252,10 @@ TimeoutStopSec=5
             assert get_service_status().status == "inactive"
             events.append({"case": "direct_systemctl_stop_stays_stopped", "passed": True})
 
-            save_bundle(AppConfig(), site)
+            select_preset(save_site(site))
             receiver.close()
             receiver = fixture.Receiver(receiver.port)
-            perform_service_action("start")
+            start()
             perform_service_action("stop")
             time.sleep(3)
             assert get_service_status().status == "inactive"
@@ -192,6 +273,8 @@ TimeoutStopSec=5
             sudo("rm", "-rf", "--", protected)
             receiver.close()
             source.close()
+            if api_client.portal:
+                api_client.__exit__(None, None, None)
 
 
 if __name__ == "__main__":

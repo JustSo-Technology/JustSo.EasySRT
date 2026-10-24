@@ -177,6 +177,7 @@ class RuntimeConfig(BaseModel):
     service_name: str
     generated_from_station: str
     sender_env_path: str
+    snapshot_id: str | None = None
     schema_version: int = 1
     ffmpeg_args: list[str] = Field(default_factory=list)
     input_scheme: str = ""
@@ -185,10 +186,21 @@ class RuntimeConfig(BaseModel):
     summary: dict[str, str] = Field(default_factory=dict)
 
 
+class SelectionSummary(BaseModel):
+    id: str
+    source_preset_id: str | None = None
+    source_revision: int | None = None
+    source_name: str
+    target: str = "default"
+    created_at: datetime
+
+
 class ConfigBundle(BaseModel):
     app: AppConfig
     site: SiteConfig
     runtime: RuntimeConfig
+    selected: SelectionSummary | None = None
+    capabilities: list[str] = Field(default_factory=list)
 
 
 class SavedSiteConfigSummary(BaseModel):
@@ -196,14 +208,15 @@ class SavedSiteConfigSummary(BaseModel):
     name: str
     created_at: datetime
     updated_at: datetime
-    last_loaded_at: datetime | None = None
-    is_active: bool = False
+    revision: int
 
 
 class SavedSiteConfigCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     site: SiteConfig
     overwrite: bool = False
+    target_id: str | None = None
+    expected_revision: int | None = Field(default=None, ge=1)
 
     @field_validator("name")
     @classmethod
@@ -216,11 +229,34 @@ class SavedSiteConfigCreateRequest(BaseModel):
 
 class SavedSiteConfigResponse(BaseModel):
     saved_config: SavedSiteConfigSummary
+
+
+class SavedSiteConfigDetail(SavedSiteConfigResponse):
     bundle: ConfigBundle
+    app_digest: str
+    runtime_digest: str
+    runtime_version: int = 1
+    expected_selection_id: str | None
+
+
+class SavedSiteConfigUpdateRequest(BaseModel):
+    site: SiteConfig
+    expected_revision: int | None = Field(default=None, ge=1)
+
+
+class ApplyPresetRequest(BaseModel):
+    expected_revision: int | None = Field(default=None, ge=1)
+    expected_selection_id: str | None = None
+    app_digest: str | None = None
+    runtime_digest: str | None = None
+    runtime_version: int = 1
+    target: str = "default"
+    request_id: str = Field(min_length=1, max_length=100)
 
 
 class SavedSiteConfigRenameRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
+    expected_revision: int | None = Field(default=None, ge=1)
 
     @field_validator("name")
     @classmethod

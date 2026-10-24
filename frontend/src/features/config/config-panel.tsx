@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import type { ConfigBundle, SavedDestinationEntry, SavedInputEntry, SavedSiteConfigSummary } from "@/lib/api";
+import type { ConfigBundle, SavedDestinationEntry, SavedInputEntry, SavedSiteConfigSummary, SavedSiteConfigDetail } from "@/lib/api";
 
 const AUDIO_BITRATE_OPTIONS = [128, 160, 192, 256, 320];
 const LATENCY_OPTIONS = [80, 120, 250, 500, 1000, 2000];
@@ -24,6 +24,7 @@ export function ConfigPanel({
   isLoadingSavedConfigs,
   isMutatingSavedConfigs,
   onSave,
+  onApply,
   onLoadSaved,
   onRenameSaved,
   onDeleteSaved,
@@ -36,10 +37,11 @@ export function ConfigPanel({
   savedDestinations?: SavedDestinationEntry[];
   isLoadingSavedConfigs?: boolean;
   isMutatingSavedConfigs?: boolean;
-  onSave: (name: string, site: ConfigBundle["site"], overwrite?: boolean) => Promise<void>;
-  onLoadSaved: (savedConfigId: string) => Promise<ConfigBundle>;
-  onRenameSaved: (savedConfigId: string, name: string) => Promise<void>;
-  onDeleteSaved: (savedConfigId: string) => Promise<void>;
+  onSave: (name: string, site: ConfigBundle["site"], base?: SavedSiteConfigSummary) => Promise<SavedSiteConfigDetail>;
+  onApply: (review: SavedSiteConfigDetail, requestId: string) => Promise<ConfigBundle>;
+  onLoadSaved: (savedConfigId: string) => Promise<SavedSiteConfigDetail>;
+  onRenameSaved: (preset: SavedSiteConfigSummary, name: string) => Promise<SavedSiteConfigSummary>;
+  onDeleteSaved: (preset: SavedSiteConfigSummary) => Promise<void>;
   onCreateSavedInput: (input: ConfigBundle["site"]["input"]) => Promise<SavedInputEntry>;
   onCreateSavedDestination: (destination: ConfigBundle["site"]["destination"]) => Promise<SavedDestinationEntry>;
 }) {
@@ -51,7 +53,16 @@ export function ConfigPanel({
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
   const [isLoadMenuOpen, setIsLoadMenuOpen] = useState(false);
   const [saveName, setSaveName] = useState(defaultSaveName(config.site));
-  const [showOverwriteWarning, setShowOverwriteWarning] = useState(false);
+  const [review, setReview] = useState<SavedSiteConfigDetail | null>(null);
+  const [applyReview, setApplyReview] = useState<SavedSiteConfigDetail | null>(null);
+  const applyRequestId = useRef("");
+  const [initialSite] = useState(config.site);
+  const canCreate = config.capabilities?.includes("presets:create") ?? false;
+  const canUpdate = config.capabilities?.includes("presets:update") ?? false;
+  const canDelete = config.capabilities?.includes("presets:delete") ?? false;
+  const canEdit = canCreate || canUpdate;
+  const canSave = review?.saved_config.name === saveName ? canUpdate : canCreate;
+  const canApply = config.capabilities?.includes("presets:apply") ?? false;
   const [renameTarget, setRenameTarget] = useState<SavedSiteConfigSummary | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<SavedSiteConfigSummary | null>(null);
@@ -79,17 +90,6 @@ export function ConfigPanel({
   const deleteDialogRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    setSite(config.site);
-    setSaveName(defaultSaveName(config.site));
-    setDraftInput(config.site.input);
-    setDraftDestination(config.site.destination);
-    setDestinationEndpointInput(formatDestinationEndpoint(config.site.destination.protocol, config.site.destination.host, config.site.destination.port));
-    setDraftDestinationEndpointInput(formatDestinationEndpoint(config.site.destination.protocol, config.site.destination.host, config.site.destination.port));
-    setIsAdvancedOpen(hasAdvancedOverrides(config.site.profile));
-    setIsVideoPanelOpen(config.site.profile.enable_video);
-  }, [config.site]);
-
-  useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
       const target = event.target;
       if (!(target instanceof Node)) {
@@ -106,7 +106,6 @@ export function ConfigPanel({
       }
       if (isSaveDialogOpen && saveDialogRef.current && !saveDialogRef.current.contains(target)) {
         setIsSaveDialogOpen(false);
-        setShowOverwriteWarning(false);
       }
       if (isCreateInputOpen && createInputDialogRef.current && !createInputDialogRef.current.contains(target)) {
         setIsCreateInputOpen(false);
@@ -126,6 +125,35 @@ export function ConfigPanel({
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [deleteTarget, isCreateDestinationOpen, isCreateInputOpen, isDestinationMenuOpen, isInputMenuOpen, isLoadMenuOpen, isSaveDialogOpen, renameTarget]);
 
+  const parsedDestination = parseDestinationEndpoint(destinationEndpointInput, site.destination);
+  const editorSite = parsedDestination ? { ...site, destination: parsedDestination } : null;
+  const dirty = !editorSite || JSON.stringify(editorSite) !== JSON.stringify(review?.bundle.site ?? initialSite);
+
+  function openReview(next: SavedSiteConfigDetail) {
+    setReview(next);
+    setSite(next.bundle.site);
+    setSaveName(next.saved_config.name);
+    setDestinationEndpointInput(formatDestinationEndpoint(next.bundle.site.destination.protocol, next.bundle.site.destination.host, next.bundle.site.destination.port));
+    setIsAdvancedOpen(hasAdvancedOverrides(next.bundle.site.profile));
+    setIsVideoPanelOpen(next.bundle.site.profile.enable_video);
+  }
+
+  async function handleApply() {
+    if (!applyReview) return;
+    setIsSaving(true);
+    try {
+      const selected = await onApply(applyReview, applyRequestId.current);
+      setReview({ ...applyReview, expected_selection_id: selected.selected?.id ?? null });
+      setApplyReview(null);
+      setSaveState("success");
+      setSaveMessage("Preset selected for the next Start/Restart. The running sender was not restarted.");
+    } catch (error) {
+      setSaveState("error");
+      setSaveMessage(error instanceof Error ? error.message : "Apply failed");
+      setApplyReview(null);
+    } finally { setIsSaving(false); }
+  }
+
   const visibleSavedConfigs = savedConfigs ?? [];
   const visibleSavedInputs = savedInputs ?? [];
   const visibleSavedDestinations = savedDestinations ?? [];
@@ -144,35 +172,30 @@ export function ConfigPanel({
       }
       const nextSite = { ...site, destination: parsedDestination };
       setSite(nextSite);
-      await onSave(saveName, nextSite, showOverwriteWarning);
+      const saved = await onSave(saveName, nextSite, review?.saved_config);
+      openReview(saved);
       setSaveState("success");
-      setSaveMessage(`Site config saved as "${saveName}". Runtime artifacts were regenerated on the backend.`);
+      setSaveMessage(`Preset saved as "${saveName}". Apply it to select it for the next Start/Restart.`);
       setIsSaveDialogOpen(false);
-      setShowOverwriteWarning(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Save failed";
-      if (message.includes("already exists")) {
-        setShowOverwriteWarning(true);
-        setSaveMessage(`A saved config named "${saveName}" already exists. Save again to overwrite it.`);
-      } else {
-        setSaveState("error");
-        setSaveMessage(message);
-      }
+      setSaveState("error");
+      setSaveMessage(message);
     } finally {
       setIsSaving(false);
     }
   }
 
   async function handleLoadSaved(savedConfigId: string, savedConfigName: string) {
+    if (dirty && !window.confirm("Discard unsaved editor changes and open this preset?")) return;
     setIsLoadingSaved(true);
     setSaveState("idle");
     setSaveMessage(null);
     try {
-      const bundle = await onLoadSaved(savedConfigId);
-      setSite(bundle.site);
-      setSaveName(defaultSaveName(bundle.site));
+      const next = await onLoadSaved(savedConfigId);
+      openReview(next);
       setSaveState("success");
-      setSaveMessage(`Loaded saved config "${savedConfigName}". Current runtime artifacts were refreshed.`);
+      setSaveMessage(`Opened preset "${savedConfigName}" for editing. The selected and running configurations are unchanged.`);
       setIsLoadMenuOpen(false);
     } catch (error) {
       setSaveState("error");
@@ -189,7 +212,8 @@ export function ConfigPanel({
     setSaveState("idle");
     setSaveMessage(null);
     try {
-      await onRenameSaved(renameTarget.id, renameValue);
+      await onRenameSaved(renameTarget, renameValue);
+      if (review?.saved_config.id === renameTarget.id) setReview(null);
       setSaveState("success");
       setSaveMessage(`Renamed saved config to "${renameValue}".`);
       setRenameTarget(null);
@@ -207,7 +231,8 @@ export function ConfigPanel({
     setSaveState("idle");
     setSaveMessage(null);
     try {
-      await onDeleteSaved(deleteTarget.id);
+      await onDeleteSaved(deleteTarget);
+      if (review?.saved_config.id === deleteTarget.id) setReview(null);
       setSaveState("success");
       setSaveMessage(`Deleted saved config "${deleteTarget.name}".`);
       setDeleteTarget(null);
@@ -254,13 +279,26 @@ export function ConfigPanel({
 
   return (
     <>
+      {applyReview ? (
+        <div role="dialog" aria-modal="true" aria-label="Review Apply" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
+          <Card className="max-w-xl space-y-4">
+            <h3 className="text-xl font-semibold">Apply {applyReview.saved_config.name} · revision {applyReview.saved_config.revision}</h3>
+            <p>Input: {applyReview.bundle.site.input.name}</p>
+            <p>Destination: {formatDestinationEndpoint(applyReview.bundle.site.destination.protocol, applyReview.bundle.site.destination.host, applyReview.bundle.site.destination.port)}</p>
+            <p>Profile: {applyReview.bundle.site.profile.name} · target: this instance</p>
+            <p>This selects the preset for the next Start/Restart. Apply does not restart or interrupt the running sender.</p>
+            <Button disabled={isSaving || dirty} onClick={() => void handleApply()}>Confirm Apply</Button>
+            <Button disabled={isSaving} onClick={() => setApplyReview(null)}>Cancel</Button>
+          </Card>
+        </div>
+      ) : null}
       <Card className="space-y-8">
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="section-label">Configuration</p>
             <h2 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-white">Stream configuration</h2>
             <p className="soft-text mt-3 max-w-3xl text-sm leading-6">
-              Manage your stream routing. Save named configurations to quickly switch between setups.
+              Save prepares a preset. Apply selects a reviewed revision for the next Start/Restart and does not interrupt the sender.
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">
@@ -271,7 +309,7 @@ export function ConfigPanel({
                   onClick={() => setIsLoadMenuOpen((current) => !current)}
                   disabled={isLoadingSaved || isLoadingSavedConfigs || isMutatingSavedConfigs}
                 >
-                  {isLoadingSaved ? "Loading..." : "Load Saved Config"}
+                  {isLoadingSaved ? "Loading..." : "Open preset"}
                 </Button>
                 {isLoadMenuOpen ? (
                   <div className="absolute right-0 top-[calc(100%+0.65rem)] z-20 w-[22rem] rounded-[24px] border border-white/10 bg-slate-950/96 p-3 shadow-[0_20px_60px_rgba(4,10,18,0.6)] backdrop-blur-xl">
@@ -286,11 +324,7 @@ export function ConfigPanel({
                               <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <div className="font-medium text-white">{savedConfig.name}</div>
-                                  {savedConfig.is_active ? (
-                                    <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-2.5 py-0.5 text-[10px] uppercase tracking-[0.18em] text-emerald-100">
-                                      Active
-                                    </span>
-                                  ) : null}
+                                  <span className="text-xs text-slate-300">Revision {savedConfig.revision}</span>
                                 </div>
                                 <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-400">
                                   Updated {formatTimestamp(savedConfig.updated_at)}
@@ -302,10 +336,11 @@ export function ConfigPanel({
                                   onClick={() => void handleLoadSaved(savedConfig.id, savedConfig.name)}
                                   className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-100 transition hover:bg-white/10"
                                 >
-                                  Load
+                                  Open
                                 </button>
                                 <button
                                   type="button"
+                                  disabled={!canUpdate}
                                   onClick={() => {
                                     setRenameTarget(savedConfig);
                                     setRenameValue(savedConfig.name);
@@ -316,6 +351,7 @@ export function ConfigPanel({
                                 </button>
                                 <button
                                   type="button"
+                                  disabled={!canDelete}
                                   onClick={() => setDeleteTarget(savedConfig)}
                                   className="rounded-full border border-rose-300/20 bg-rose-300/10 px-3 py-1.5 text-xs font-medium text-rose-100 transition hover:bg-rose-300/20"
                                 >
@@ -334,10 +370,20 @@ export function ConfigPanel({
                   </div>
                 ) : null}
               </div>
-              <Button onClick={() => setIsSaveDialogOpen(true)} disabled={isSaving}>
-                {isSaving ? "Saving..." : saveState === "success" ? "Saved" : "Save Site Config"}
+              <Button onClick={() => setIsSaveDialogOpen(true)} disabled={isSaving || !canEdit}>
+                {isSaving ? "Saving..." : "Save preset"}
               </Button>
+              <Button disabled={!canApply || !review || dirty || isSaving || isMutatingSavedConfigs} onClick={() => {
+                if (review) {
+                  applyRequestId.current = crypto.randomUUID();
+                  setApplyReview({ ...review, expected_selection_id: config.selected?.id ?? null });
+                }
+              }}>Apply preset</Button>
             </div>
+            <p className="text-xs text-slate-300">{dirty ? "Unsaved editor changes — Save before Apply." : review ? `Editing ${review.saved_config.name} · revision ${review.saved_config.revision}` : "Open or save a preset before Apply."}</p>
+            <span>
+              Selected: {config.selected ? `${config.selected.source_name} · revision ${config.selected.source_revision ?? "legacy"}` : "None — Apply a preset before Start"}
+            </span>
             <span
               className={
                 saveState === "success"
@@ -394,7 +440,8 @@ export function ConfigPanel({
                     <div className="absolute left-0 top-[calc(100%+0.65rem)] z-20 w-full rounded-[24px] border border-white/10 bg-slate-950/96 p-3 shadow-[0_20px_60px_rgba(4,10,18,0.6)] backdrop-blur-xl">
                       <button
                         type="button"
-                        onClick={() => {
+                        disabled={!canEdit}
+                    onClick={() => {
                           setDraftInput(site.input);
                           setIsCreateInputOpen(true);
                         }}
@@ -707,33 +754,28 @@ export function ConfigPanel({
           <div ref={saveDialogRef} className="w-full max-w-xl">
             <Card className="space-y-6 border border-white/10 bg-[rgba(8,14,22,0.94)]">
               <div>
-                <p className="section-label">Save Site Config</p>
-                <h3 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-white">Save configuration</h3>
+                <p className="section-label">Save preset</p>
+                <h3 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-white">Save preset</h3>
                 <p className="soft-text mt-3 text-sm leading-6">
-                  Save a named snapshot of the current routing. Load it again at any time from this tab.
+                  Save a preset without changing selected or running configuration. Open an existing preset before overwriting it.
                 </p>
               </div>
               <Field label="Saved Config Name">
                 <Input value={saveName} onChange={(event) => setSaveName(event.target.value)} autoFocus />
               </Field>
-              {showOverwriteWarning ? (
-                <div className="rounded-[22px] border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">
-                  A saved config with this name already exists. Saving now will overwrite that existing config and make it the active route.
-                </div>
-              ) : null}
+
               <div className="flex flex-wrap justify-end gap-3">
                 <Button
                   className="bg-[linear-gradient(135deg,#d8eef9,#8ebcd8)]"
                   onClick={() => {
                     setIsSaveDialogOpen(false);
-                    setShowOverwriteWarning(false);
                   }}
                   type="button"
                 >
                   Cancel
                 </Button>
-                <Button onClick={() => void handleSave()} disabled={isSaving || !saveName.trim()}>
-                  {isSaving ? "Saving..." : showOverwriteWarning ? "Overwrite Config" : "Save Config"}
+                <Button onClick={() => void handleSave()} disabled={isSaving || !canSave || !saveName.trim()}>
+                  {isSaving ? "Saving..." : "Save preset"}
                 </Button>
               </div>
             </Card>
@@ -758,7 +800,7 @@ export function ConfigPanel({
                 <Button className="bg-[linear-gradient(135deg,#d8eef9,#8ebcd8)]" onClick={() => setIsCreateInputOpen(false)} type="button">
                   Cancel
                 </Button>
-                <Button onClick={() => void handleCreateInput()} disabled={!draftInput.name.trim() || !draftInput.url.trim() || isMutatingSavedConfigs}>
+                <Button onClick={() => void handleCreateInput()} disabled={!draftInput.name.trim() || !draftInput.url.trim() || isMutatingSavedConfigs || !canEdit}>
                   Save Input
                 </Button>
               </div>
@@ -799,7 +841,7 @@ export function ConfigPanel({
                 </Button>
                 <Button
                   onClick={() => void handleCreateDestination()}
-                  disabled={!draftDestination.name.trim() || !draftDestination.host.trim() || isMutatingSavedConfigs}
+                  disabled={!draftDestination.name.trim() || !draftDestination.host.trim() || isMutatingSavedConfigs || !canEdit}
                 >
                   Save Destination
                 </Button>
@@ -823,7 +865,7 @@ export function ConfigPanel({
                 <Button className="bg-[linear-gradient(135deg,#d8eef9,#8ebcd8)]" onClick={() => setRenameTarget(null)} type="button">
                   Cancel
                 </Button>
-                <Button onClick={() => void handleRenameSaved()} disabled={!renameValue.trim() || isMutatingSavedConfigs}>
+                <Button onClick={() => void handleRenameSaved()} disabled={!renameValue.trim() || isMutatingSavedConfigs || !canEdit}>
                   Save Name
                 </Button>
               </div>
@@ -849,7 +891,7 @@ export function ConfigPanel({
                 <Button
                   className="border-rose-300/20 bg-[linear-gradient(135deg,#f6c17a,#f38d7a)] text-slate-950 shadow-[0_10px_35px_rgba(243,141,122,0.18)] hover:shadow-[0_12px_40px_rgba(243,141,122,0.26)]"
                   onClick={() => void handleDeleteSaved()}
-                  disabled={isMutatingSavedConfigs}
+                  disabled={isMutatingSavedConfigs || !canDelete}
                 >
                   Delete Config
                 </Button>

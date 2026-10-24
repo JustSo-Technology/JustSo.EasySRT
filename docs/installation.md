@@ -222,3 +222,5 @@ http://<server-ip>:5173
 ## Updates and recovery
 
 Use the owner-only updater UI or `sudo /usr/local/lib/justso-easysrt/update-ubuntu.sh`. It backs up environment/data/privileged files, builds the selected ref and checks health; failed application updates attempt rollback. Review the reported result and logs. The control plane restarts; the sender is not deliberately restarted. An older installation with privileged code under `/opt` needs migration using a trusted installer. See [deployment security](deployment-security.md#privileged-code-and-updates). Keep independent backups; preset export is not a full database/account backup.
+
+After signing in, use **Config → Save preset → Apply preset**, review the selection, then **Control → Start**. Saving alone does not create a launch selection. See [configuration](configuration.md) for revision conflicts, selected/running state and upgrade behavior.

@@ -217,7 +217,7 @@ def test_invalid_site_config_scheme_returns_422(client: TestClient):
     payload = bundle.site.model_dump()
     payload["input"]["url"] = "ftp://unsupported.example.com/audio.mp3"
 
-    response = client.put("/api/config/site", json=payload)
+    response = client.post("/api/config/saved", json={"name": "Validation", "site": payload})
 
     assert response.status_code == 422
     assert "Input URL scheme must be one of" in response.text
@@ -229,7 +229,7 @@ def test_invalid_site_config_profile_returns_422(client: TestClient):
     payload = bundle.site.model_dump()
     payload["profile"]["channels"] = 6
 
-    response = client.put("/api/config/site", json=payload)
+    response = client.post("/api/config/saved", json={"name": "Validation", "site": payload})
 
     assert response.status_code == 422
     assert "Channels must be 1 or 2" in response.text
@@ -243,7 +243,7 @@ def test_video_requires_source_mapping(client: TestClient):
     payload["profile"]["mux_rate_kbps"] = 2000
     payload["profile"]["video_source"] = "none"
 
-    response = client.put("/api/config/site", json=payload)
+    response = client.post("/api/config/saved", json={"name": "Validation", "site": payload})
 
     assert response.status_code == 422
     assert "Video source mapping must be selected" in response.text
@@ -316,46 +316,24 @@ def test_owner_can_save_and_list_named_site_configs(client: TestClient):
 
     assert create_response.status_code == 200
     assert create_response.json()["saved_config"]["name"] == "Raw FM to Parents"
-    assert create_response.json()["bundle"]["site"]["input"]["name"] == bundle.site.input.name
+    assert "bundle" not in create_response.json()
 
     list_response = client.get("/api/config/saved")
 
     assert list_response.status_code == 200
     assert list_response.json()[0]["name"] == "Raw FM to Parents"
-    assert list_response.json()[0]["is_active"] is True
+    assert list_response.json()[0]["revision"] == 1
+    assert load_bundle().selected is None
 
 
-def test_loading_saved_site_config_updates_live_bundle(client: TestClient):
+def test_opening_saved_config_is_preview_only_and_legacy_load_is_retired(client: TestClient):
     bootstrap(client)
-    bundle = load_bundle()
-    payload = {
-        "name": "Receiver B",
-        "site": {
-            **bundle.site.model_dump(),
-            "destination": {
-                **bundle.site.destination.model_dump(),
-                "host": "100.120.133.115",
-                "port": 16466,
-            },
-        },
-    }
-
-    save_response = client.post("/api/config/saved", json=payload)
-    saved_id = save_response.json()["saved_config"]["id"]
-
-    second_payload = {
-        "input": {"name": "Another Feed", "url": "http://example.com/live.mp3"},
-        "destination": {"name": "Elsewhere", "host": "stream.example.com", "port": 15000},
-        "profile": bundle.site.profile.model_dump(),
-    }
-    overwrite_response = client.put("/api/config/site", json=second_payload)
-    assert overwrite_response.status_code == 200
-
-    load_response = client.post(f"/api/config/saved/{saved_id}/load")
-
-    assert load_response.status_code == 200
-    assert load_response.json()["site"]["destination"]["host"] == "100.120.133.115"
-    assert load_bundle().site.destination.host == "100.120.133.115"
+    from test_presets import save, review
+    before = load_bundle().model_dump()
+    preset = save(client)
+    assert review(client, preset)["bundle"]["site"]["destination"]["host"] == "receiver-a.example"
+    assert load_bundle().model_dump() == before
+    assert client.post(f"/api/config/saved/{preset['id']}/load").status_code == 410
 
 
 def test_saving_existing_named_config_requires_overwrite_flag(client: TestClient):
@@ -370,7 +348,9 @@ def test_saving_existing_named_config_requires_overwrite_flag(client: TestClient
     assert second_response.status_code == 409
     assert "already exists" in second_response.text
 
-    overwrite_response = client.post("/api/config/saved", json={**payload, "overwrite": True})
+    assert client.post("/api/config/saved", json={**payload, "overwrite": True}).status_code == 428
+    overwrite_response = client.post("/api/config/saved", json={**payload, "overwrite": True,
+        "target_id": first_response.json()["saved_config"]["id"], "expected_revision": 1})
     assert overwrite_response.status_code == 200
 
 
@@ -380,11 +360,11 @@ def test_saved_config_can_be_renamed_and_deleted(client: TestClient):
     create_response = client.post("/api/config/saved", json={"name": "Original Name", "site": bundle.site.model_dump()})
     saved_id = create_response.json()["saved_config"]["id"]
 
-    rename_response = client.patch(f"/api/config/saved/{saved_id}", json={"name": "Renamed Config"})
+    rename_response = client.patch(f"/api/config/saved/{saved_id}", json={"name": "Renamed Config", "expected_revision": 1})
     assert rename_response.status_code == 200
     assert rename_response.json()["name"] == "Renamed Config"
 
-    delete_response = client.delete(f"/api/config/saved/{saved_id}")
+    delete_response = client.delete(f"/api/config/saved/{saved_id}?expected_revision=2")
     assert delete_response.status_code == 200
 
     list_response = client.get("/api/config/saved")
@@ -392,24 +372,11 @@ def test_saved_config_can_be_renamed_and_deleted(client: TestClient):
     assert list_response.json() == []
 
 
-def test_direct_site_update_clears_active_saved_config(client: TestClient):
+def test_direct_site_update_is_retired(client: TestClient):
     bootstrap(client)
-    bundle = load_bundle()
-    client.post("/api/config/saved", json={"name": "Original Name", "site": bundle.site.model_dump()})
-
-    update_response = client.put(
-        "/api/config/site",
-        json={
-            "input": {"name": "Changed", "url": "http://example.com/live.mp3"},
-            "destination": {"name": "Receiver", "host": "stream.example.com", "port": 15000},
-            "profile": bundle.site.profile.model_dump(),
-        },
-    )
-    assert update_response.status_code == 200
-
-    list_response = client.get("/api/config/saved")
-    assert list_response.status_code == 200
-    assert list_response.json()[0]["is_active"] is False
+    before = load_bundle().model_dump()
+    assert client.put("/api/config/site", json=load_bundle().site.model_dump()).status_code == 410
+    assert load_bundle().model_dump() == before
 
 
 def test_owner_can_save_and_list_inputs_and_destinations(client: TestClient):
@@ -454,7 +421,7 @@ def test_saved_input_and_destination_names_must_be_unique(client: TestClient):
     assert second_destination.status_code == 409
 
 
-def test_service_start_blocks_when_runtime_artifacts_missing(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+def test_service_start_requires_review_before_preflight(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     bootstrap(client)
     bundle = load_bundle()
     save_bundle(bundle.app, bundle.site)
@@ -463,9 +430,7 @@ def test_service_start_blocks_when_runtime_artifacts_missing(client: TestClient,
 
     response = client.post("/api/service/start")
 
-    assert response.status_code == 424
-    assert response.json()["preflight_ok"] is False
-    assert any("runtime-config" in failure for failure in response.json()["preflight_failures"])
+    assert response.status_code == 428
 
 
 def test_service_invalid_transition_returns_409(client: TestClient, monkeypatch: pytest.MonkeyPatch):
@@ -486,7 +451,8 @@ def test_service_invalid_transition_returns_409(client: TestClient, monkeypatch:
 
 def test_service_systemctl_failure_returns_502(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     bootstrap(client)
-    save_bundle(load_bundle().app, load_bundle().site)
+    from test_presets import save, apply
+    selected = apply(client, save(client))
     mock_tooling(monkeypatch)
 
     def fake_request_helper(action: str, *, actor, payload=None):
@@ -501,7 +467,7 @@ def test_service_systemctl_failure_returns_502(client: TestClient, monkeypatch: 
 
     monkeypatch.setattr(service_control, "request_helper", fake_request_helper)
 
-    response = client.post("/api/service/start")
+    response = client.post("/api/service/start", json={"expected_selection_id": selected["selected"]["id"]})
 
     assert response.status_code == 502
     assert response.json()["last_exit_code"] == 1
@@ -902,7 +868,10 @@ def test_config_change_advances_version_and_invalidates_partner_readiness(client
     payload = bundle.site.model_dump()
     payload["profile"]["mux_rate_kbps"] = bundle.site.profile.mux_rate_kbps + 100
 
-    update_response = client.put("/api/config/site", json=payload)
+    from test_presets import save, apply_body, review
+    preset = save(client)
+    assert client.put(f"/api/config/saved/{preset['id']}", json={"site": payload, "expected_revision": 1}).status_code == 200
+    update_response = client.post(f"/api/config/saved/{preset['id']}/apply", json=apply_body(review(client, preset)))
 
     assert update_response.status_code == 200
 
@@ -948,13 +917,13 @@ def test_rejected_duplicate_config_has_no_persisted_side_effects(client: TestCli
     before_config = client.get("/api/config").json()
     before_saved = client.get("/api/config/saved").json()
     paths = [settings.app_config_path, settings.site_config_path, settings.runtime_config_path, settings.sender_env_path]
-    before_files = {path: path.read_bytes() for path in paths}
+    before_files = {path: path.read_bytes() if path.exists() else None for path in paths}
     payload["site"]["destination"]["host"] = "changed.example.com"
     response = client.post("/api/config/saved", json=payload)
     assert response.status_code == 409
     assert client.get("/api/config").json() == before_config
     assert client.get("/api/config/saved").json() == before_saved
-    assert {path: path.read_bytes() for path in paths} == before_files
+    assert {path: path.read_bytes() if path.exists() else None for path in paths} == before_files
 
 
 @pytest.mark.parametrize("origin", ["https://easysrt.example.com", "https://easysrt.example.com:8443", "https://[2001:db8::1]"])
