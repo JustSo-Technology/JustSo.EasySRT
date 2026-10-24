@@ -168,4 +168,4 @@ def bulk(payload: BulkRevoke, request: Request, session: Session = Depends(get_s
 def history(token_id: str, offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100), session: Session = Depends(get_session)):
     get_token(session, token_id)
     rows = session.exec(select(ApiAudit).where(ApiAudit.token_id == token_id).order_by(ApiAudit.created_at.desc()).offset(offset).limit(limit)).all()
-    return {'items': [r.model_dump(mode='json') for r in rows]}
+    return {'items': [tokens.public_audit(r) for r in rows]}

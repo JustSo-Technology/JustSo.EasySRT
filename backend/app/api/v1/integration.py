@@ -27,6 +27,15 @@ def operation(path, method, scope=None, kind=None, **kwargs):
     return router.api_route(path, methods=[method], openapi_extra={'x-required-scope': scope, 'x-resource-kind': kind}, **kwargs)
 
 
+def public_summary(record):
+    value = config._saved_config_summary(record) if isinstance(record, SavedSiteConfigRecord) else record
+    return value.model_copy(update={'created_at': tokens.aware(value.created_at), 'updated_at': tokens.aware(value.updated_at)})
+
+
+def public_selection(value):
+    return value.model_copy(update={'created_at': tokens.aware(value.created_at)}) if value else None
+
+
 def identity():
     with Session(get_engine()) as session:
         return tokens.instance_id(session)
@@ -68,7 +77,7 @@ def discovery(p: ApiPrincipal = ApiAuth):
 def own_token(p: ApiPrincipal = ApiAuth, session: Session = Depends(get_session)):
     from app.models.api_token import ApiToken
     token = session.get(ApiToken, p.token_id)
-    return {'id': token.id, 'name': token.name, 'integration': token.integration, 'expires_at': token.expires_at,
+    return {'id': token.id, 'name': token.name, 'integration': token.integration, 'expires_at': tokens.aware(token.expires_at),
             'instance_id': token.instance_id, 'effective_grants': [g.model_dump() for g in p.grants()]}
 
 
@@ -229,7 +238,7 @@ def read_config(p: ApiPrincipal = ApiAuth):
     with target_lock():
         bundle = config.load_bundle()
         current_app = read_app_settings()
-    return {'app': current_app, 'app_digest': digest(current_app.model_dump()), 'site': site_view(bundle.site, p, 'instance', identity()), 'selected': bundle.selected}
+    return {'app': current_app, 'app_digest': digest(current_app.model_dump()), 'site': site_view(bundle.site, p, 'instance', identity()), 'selected': public_selection(bundle.selected)}
 
 
 class AppUpdate(BaseModel):
@@ -276,13 +285,14 @@ def list_presets(offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=1
     query = select(SavedSiteConfigRecord).order_by(SavedSiteConfigRecord.id)
     if not any(g.resource_id == '*' for g in grants):
         query = query.where(SavedSiteConfigRecord.id.in_([g.resource_id for g in grants]))
-    return {'items': [config._saved_config_summary(r) for r in session.exec(query.offset(offset).limit(limit)).all()]}
+    return {'items': [public_summary(r) for r in session.exec(query.offset(offset).limit(limit)).all()]}
 
 
 @operation('/presets/{preset_id}', 'GET', 'presets:read', 'preset')
 def preset_detail(preset_id: str, p: ApiPrincipal = ApiAuth, session: Session = Depends(get_session)):
     record = get_preset(session, p, preset_id)
     view = config.preview_preset(session, preset_id).model_dump(mode='json')
+    view['saved_config'] = public_summary(record).model_dump(mode='json')
     view['bundle'] = {'app': view['bundle']['app'], 'site': site_view(view['bundle']['site'], p, 'preset', record.id)}
     return view
 
@@ -302,7 +312,7 @@ def create_preset(body: PresetBody, p: ApiPrincipal = ApiAuth, session: Session 
         session.commit()
     except IntegrityError:
         raise HTTPException(409, 'Preset name conflict') from None
-    return record
+    return public_summary(record)
 
 
 @operation('/presets/{preset_id}', 'PATCH', 'presets:update', 'preset')
@@ -322,7 +332,7 @@ def update_preset(preset_id: str, body: PresetBody, p: ApiPrincipal = ApiAuth, s
         config.rename_saved_site_config(session, preset_id, body.name, record.revision)
     tokens.audit(session, p.user.id, 'presets:update', token_id=p.token_id, resource_id=preset_id, request_id=p.request_id)
     session.commit()
-    return config._saved_config_summary(record)
+    return public_summary(record)
 
 
 @operation('/presets/{preset_id}', 'DELETE', 'presets:delete', 'preset')
@@ -342,7 +352,7 @@ def apply(preset_id: str, body: ApplyPresetRequest, p: ApiPrincipal = ApiAuth):
     body.request_id = hashlib.sha256((p.token_id + ':' + body.request_id).encode()).hexdigest()
     bundle = apply_preset(p.preset_actor(), preset_id, body)
     event(p, 'presets:apply', preset_id)
-    return {'selected': bundle.selected, 'running_sender_restarted': False}
+    return {'selected': public_selection(bundle.selected), 'running_sender_restarted': False}
 
 
 LIBRARIES = {'inputs': (SavedInputRecord, 'input_payload', InputSource, 'input'),
@@ -356,7 +366,7 @@ def library_routes(prefix):
         if kind == 'input':
             value = source_view(value, p, kind, record.id)
         return {'id': record.id, 'value': value, 'digest': digest(json.loads(getattr(record, field))),
-                'created_at': record.created_at, 'updated_at': record.updated_at}
+                'created_at': tokens.aware(record.created_at), 'updated_at': tokens.aware(record.updated_at)}
 
     def get(session, p, resource_id, action):
         p.require(prefix + ':' + action, kind, resource_id, invisible=True)
@@ -564,7 +574,7 @@ def check_updates(p: ApiPrincipal = ApiAuth):
 @operation('/audit-events', 'GET', 'audit:read', 'instance')
 def audit_events(offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100), p: ApiPrincipal = ApiAuth, session: Session = Depends(get_session)):
     instance_scope(p, 'audit:read')
-    return {'items': [r.model_dump(mode='json') for r in session.exec(select(ApiAudit).order_by(ApiAudit.created_at.desc()).offset(offset).limit(limit)).all()]}
+    return {'items': [tokens.public_audit(r) for r in session.exec(select(ApiAudit).order_by(ApiAudit.created_at.desc()).offset(offset).limit(limit)).all()]}
 
 
 @operation('/openapi.json', 'GET')

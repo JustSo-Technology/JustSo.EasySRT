@@ -70,6 +70,10 @@ def test_secret_shown_once_hashed_and_metadata_only(owner):
     assert client.get('/api/v1/').status_code == 200
     own = client.get('/api/v1/auth/token').json()
     assert own['id'] == token['id']
+    from datetime import datetime
+    assert datetime.fromisoformat(own['expires_at']).tzinfo is not None
+    audit = owner[0].get('/api/v1/tokens/' + token['id'] + '/audit-events').json()['items']
+    assert datetime.fromisoformat(audit[0]['created_at']).tzinfo is not None
     assert owner[0].get('/api/v1/tokens/' + token['id']).json()['last_used_at']
 
 
@@ -106,6 +110,8 @@ def test_resource_lists_filter_before_pagination_and_edit_does_not_apply(owner):
     client = bearer(token['secret'])
     items = client.get('/api/v1/presets?limit=1').json()['items']
     assert [i['id'] for i in items] == [b['id']]
+    from datetime import datetime
+    assert datetime.fromisoformat(items[0]['created_at']).tzinfo is not None
     assert client.get('/api/v1/presets/' + a['id']).status_code == 404
     changed = client.patch('/api/v1/presets/' + b['id'], json={'name': 'B2', 'expected_revision': 1})
     assert changed.status_code == 200, changed.text

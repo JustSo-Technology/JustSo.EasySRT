@@ -43,6 +43,12 @@ def audit(session, actor_id, action, *, token_id=None, resource_id='', outcome='
                          outcome=outcome, request_id=request_id, detail_json=json.dumps(detail or {})))
 
 
+def public_audit(record):
+    result = record.model_dump(mode='json')
+    result['created_at'] = aware(record.created_at).isoformat()
+    return result
+
+
 def reauthenticate(user, password):
     if not password or not verify_password(password, user.password_hash):
         raise HTTPException(403, 'Current owner password is required')
