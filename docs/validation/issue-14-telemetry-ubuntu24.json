@@ -1,0 +1,257 @@
+{
+  "platform": "Linux-6.8.0-136-generic-x86_64-with-glibc2.39",
+  "ffmpeg": "ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers",
+  "cases": [
+    {
+      "video": false,
+      "fault": "input_stall",
+      "healthy": {
+        "input_samples": 321408,
+        "output_bytes": 483536,
+        "input_age": 0.0,
+        "output_age": 0.142,
+        "receiver_bytes": 1257984,
+        "source_bytes": 505344,
+        "process_alive": true,
+        "progress_records": 28,
+        "errors": []
+      },
+      "failed": {
+        "input_samples": 323712,
+        "output_bytes": 483536,
+        "input_age": 12.044,
+        "output_age": 12.187,
+        "receiver_bytes": 1285632,
+        "source_bytes": 505344,
+        "process_alive": true,
+        "progress_records": 28,
+        "errors": []
+      },
+      "passed": true
+    },
+    {
+      "video": false,
+      "fault": "input_disconnect",
+      "healthy": {
+        "input_samples": 323712,
+        "output_bytes": 483536,
+        "input_age": 0.05,
+        "output_age": 0.193,
+        "receiver_bytes": 1271808,
+        "source_bytes": 507976,
+        "process_alive": true,
+        "progress_records": 28,
+        "errors": []
+      },
+      "failed": {
+        "input_samples": 324864,
+        "output_bytes": 508540,
+        "input_age": 12.03,
+        "output_age": 12.019,
+        "receiver_bytes": 1271808,
+        "source_bytes": 507976,
+        "process_alive": false,
+        "progress_records": 29,
+        "errors": [
+          "[http @ 0x5a946d386540] Stream ends prematurely at 507976, should be 18446744073709551615",
+          "[mpegts @ 0x5a946d3cd4c0] PES packet size mismatch",
+          "[mpegts @ 0x5a946d3cd4c0] Packet corrupt (stream = 0, dts = 735120).",
+          "[in#0/mpegts @ 0x5a946d3cd3c0] Error during demuxing: Input/output error",
+          "[in#0/mpegts @ 0x5a946d3cd3c0] Error retrieving a packet from demuxer: Input/output error"
+        ]
+      },
+      "passed": true
+    },
+    {
+      "video": false,
+      "fault": "output_stall",
+      "healthy": {
+        "input_samples": 323712,
+        "output_bytes": 483536,
+        "input_age": 0.0,
+        "output_age": 0.143,
+        "receiver_bytes": 1257984,
+        "source_bytes": 505344,
+        "process_alive": true,
+        "progress_records": 28,
+        "errors": []
+      },
+      "failed": {
+        "input_samples": 421632,
+        "output_bytes": 634500,
+        "input_age": 9.889,
+        "output_age": 9.959,
+        "receiver_bytes": 1259300,
+        "source_bytes": 1392328,
+        "process_alive": true,
+        "progress_records": 38,
+        "errors": []
+      },
+      "passed": true
+    },
+    {
+      "video": false,
+      "fault": "output_disconnect",
+      "healthy": {
+        "input_samples": 320256,
+        "output_bytes": 483536,
+        "input_age": 0.05,
+        "output_age": 0.122,
+        "receiver_bytes": 1257984,
+        "source_bytes": 502712,
+        "process_alive": true,
+        "progress_records": 28,
+        "errors": []
+      },
+      "failed": {
+        "input_samples": 326016,
+        "output_bytes": 499328,
+        "input_age": 12.022,
+        "output_age": 12.022,
+        "receiver_bytes": 1262592,
+        "source_bytes": 517188,
+        "process_alive": false,
+        "progress_records": 29,
+        "errors": [
+          "[aost#0:0/mp2 @ 0x61c8bbb4c400] Error submitting a packet to the muxer: Input/output error",
+          "[out#0/mpegts @ 0x61c8bbb40340] Error muxing a packet",
+          "[out#0/mpegts @ 0x61c8bbb40340] Error writing trailer: Input/output error",
+          "[out#0/mpegts @ 0x61c8bbb40340] Error closing file: Input/output error"
+        ]
+      },
+      "passed": true
+    },
+    {
+      "video": true,
+      "fault": "input_stall",
+      "healthy": {
+        "input_samples": 323712,
+        "output_bytes": 486356,
+        "input_age": 0.05,
+        "output_age": 0.202,
+        "receiver_bytes": 1244160,
+        "source_bytes": 509292,
+        "process_alive": true,
+        "progress_records": 30,
+        "errors": [
+          "[in#0/mpegts @ 0x5eb40f6fe480] Thread message queue blocking; consider raising the thread_queue_size option (current value: 8)"
+        ]
+      },
+      "failed": {
+        "input_samples": 323712,
+        "output_bytes": 501584,
+        "input_age": 12.098,
+        "output_age": 12.046,
+        "receiver_bytes": 1271808,
+        "source_bytes": 509292,
+        "process_alive": true,
+        "progress_records": 31,
+        "errors": [
+          "[in#0/mpegts @ 0x5eb40f6fe480] Thread message queue blocking; consider raising the thread_queue_size option (current value: 8)"
+        ]
+      },
+      "passed": true
+    },
+    {
+      "video": true,
+      "fault": "input_disconnect",
+      "healthy": {
+        "input_samples": 323712,
+        "output_bytes": 501584,
+        "input_age": 0.011,
+        "output_age": 0.0,
+        "receiver_bytes": 1244160,
+        "source_bytes": 505344,
+        "process_alive": true,
+        "progress_records": 31,
+        "errors": [
+          "[in#0/mpegts @ 0x5ec392daa480] Thread message queue blocking; consider raising the thread_queue_size option (current value: 8)"
+        ]
+      },
+      "failed": {
+        "input_samples": 323712,
+        "output_bytes": 7842232,
+        "input_age": 12.039,
+        "output_age": 0.15,
+        "receiver_bytes": 1285632,
+        "source_bytes": 505344,
+        "process_alive": true,
+        "progress_records": 74,
+        "errors": [
+          "[in#0/mpegts @ 0x5ec392daa480] Thread message queue blocking; consider raising the thread_queue_size option (current value: 8)",
+          "[http @ 0x5ec392d63540] Stream ends prematurely at 505344, should be 18446744073709551615",
+          "[in#0/mpegts @ 0x5ec392daa480] Error during demuxing: Input/output error",
+          "[in#0/mpegts @ 0x5ec392daa480] Error retrieving a packet from demuxer: Input/output error"
+        ]
+      },
+      "passed": true
+    },
+    {
+      "video": true,
+      "fault": "output_stall",
+      "healthy": {
+        "input_samples": 323712,
+        "output_bytes": 486356,
+        "input_age": 0.05,
+        "output_age": 0.2,
+        "receiver_bytes": 1257984,
+        "source_bytes": 509292,
+        "process_alive": true,
+        "progress_records": 30,
+        "errors": [
+          "[in#0/mpegts @ 0x5f2a49956480] Thread message queue blocking; consider raising the thread_queue_size option (current value: 8)"
+        ]
+      },
+      "failed": {
+        "input_samples": 405504,
+        "output_bytes": 620212,
+        "input_age": 10.333,
+        "output_age": 10.417,
+        "receiver_bytes": 1259300,
+        "source_bytes": 1401540,
+        "process_alive": true,
+        "progress_records": 39,
+        "errors": [
+          "[in#0/mpegts @ 0x5f2a49956480] Thread message queue blocking; consider raising the thread_queue_size option (current value: 8)"
+        ]
+      },
+      "passed": true
+    },
+    {
+      "video": true,
+      "fault": "output_disconnect",
+      "healthy": {
+        "input_samples": 323712,
+        "output_bytes": 501584,
+        "input_age": 0.021,
+        "output_age": 0.0,
+        "receiver_bytes": 1244160,
+        "source_bytes": 506660,
+        "process_alive": true,
+        "progress_records": 31,
+        "errors": [
+          "[in#0/mpegts @ 0x60db62dbe480] Thread message queue blocking; consider raising the thread_queue_size option (current value: 8)"
+        ]
+      },
+      "failed": {
+        "input_samples": 326016,
+        "output_bytes": 505532,
+        "input_age": 12.019,
+        "output_age": 12.019,
+        "receiver_bytes": 1248768,
+        "source_bytes": 517188,
+        "process_alive": false,
+        "progress_records": 32,
+        "errors": [
+          "[in#0/mpegts @ 0x60db62dbe480] Thread message queue blocking; consider raising the thread_queue_size option (current value: 8)",
+          "[vost#0:1/mpeg2video @ 0x60db62e3e8c0] Error submitting a packet to the muxer: Input/output error",
+          "[out#0/mpegts @ 0x60db62e2b980] Error muxing a packet",
+          "[out#0/mpegts @ 0x60db62e2b980] Error writing trailer: Input/output error",
+          "[out#0/mpegts @ 0x60db62e2b980] Error closing file: Input/output error"
+        ]
+      },
+      "passed": true
+    }
+  ],
+  "passed": true
+}

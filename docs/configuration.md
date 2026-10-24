@@ -13,6 +13,40 @@
 
 Saving/loading configuration does not by itself restart an already-running FFmpeg process. Schedule a deliberate restart to apply changed runtime settings to a live sender. Coordinate this interruption with the receiving operator. This is distinct from importing presets, which does not activate them at all.
 
+## Automatic path recovery
+
+The sender supervisor checks source-audio samples and local output media separately. **Healthy** means these local counters are advancing; confirm receiver lock and audio separately. A live process, generated black video, or SRT keepalives alone cannot establish source-audio health. Silent audio with advancing samples is valid media.
+
+The Control tab shows connecting, healthy, degraded, retrying, stopped, or unknown, with the current reason, progress age, retry timing and recent recovery history. Unknown/stale evidence is never shown as healthy. Stop cancels retries, including during startup or a prolonged outage. A successful finite file completes without replaying automatically.
+
+Recovery restarts only this instance's FFmpeg child. It retains the **applied** source, destination, encoding and transport settings even when someone has since saved another configuration. The dashboard shows the applied route and indicates saved settings waiting for a deliberate Restart. Recovery continues with the browser closed and through backend/helper restarts. Journal events record failure, retry and recovery timestamps without source credentials.
+
+When both media counters stop, the UI reports an unconfirmed media stall: output backpressure can also stop source processing, so the cause cannot always be assigned to one side. Local UDP output provides no receiver acknowledgement. SRT transport acceptance also does not prove receiver playback.
+
+Recovery deadlines are host settings in `/etc/justso-easysrt/easysrt.env`. These defaults work without per-preset changes:
+
+| Environment variable | Default | Valid range (seconds) |
+| --- | --- | --- |
+| `EASYSRT_RECOVERY__STARTUP_SECONDS` | 30 | 5–300 |
+| `EASYSRT_RECOVERY__INPUT_STALL_SECONDS` | 15 | 3–300 |
+| `EASYSRT_RECOVERY__OUTPUT_STALL_SECONDS` | 15 | 3–300 |
+| `EASYSRT_RECOVERY__IO_TIMEOUT_SECONDS` | 10 | 1–120 |
+| `EASYSRT_RECOVERY__RETRY_INITIAL_SECONDS` | 2 | 1–30 |
+| `EASYSRT_RECOVERY__RETRY_MAX_SECONDS` | 30 | 1–300 |
+| `EASYSRT_RECOVERY__STABLE_SECONDS` | 30 | 5–300 |
+
+The initial retry delay must not exceed the maximum, and I/O timeout must not exceed startup timeout. SRT latency must be shorter than startup, output-stall and I/O deadlines. Set deadlines above the source cadence and intended buffering. FFmpeg's buffered media can continue progressing briefly after a network failure; stall deadlines measure time since the last observed media progress.
+
+Retries use exponential backoff with jitter between 80% and 100% of the selected delay, never exceeding the maximum. Backoff resets after sustained media progress. A stuck child receives escalating termination signals before a replacement can start. If the OS cannot reap it, the supervisor reports cleanup failure and waits without launching duplicates.
+
+After editing host policy, restart the backend to regenerate the candidate runtime, then deliberately Restart the sender when ready to apply it. Preset import/export remains compatible because host recovery policy is not part of portable presets. Read [the validation report](validation/issue-14-recovery.md) for the tested transports and evidence limits.
+
+### Upgrading an existing live sender
+
+An update installs the supervisor and service unit but leaves the live sender alone. Until its next explicit Start/Restart, a legacy sender reports media health unavailable. Start/Restart through the WebUI pins `applied_sender.json` and activates recovery. Direct `systemctl stop` is respected; use the WebUI Start/Restart to apply new saved settings. A direct systemd crash restart reuses the applied snapshot.
+
+Systemd separately restarts a crashed supervisor, with a five-crash limit in sixty seconds. If the supervisor itself keeps crashing, inspect the sender journal and correct the runtime before using Start again. This crash limit does not cap the supervisor's ongoing media reconnect attempts.
+
 ## Input
 
 Give the source a recognisable name and a URL the **Ubuntu VM** can reach. For example, `https://audio.example.com/live` (replace with your actual source). Supported URL schemes in the configuration model are HTTP, HTTPS, UDP, RTP, RTSP, RTMP, SRT and file. Actual decoding depends on the installed FFmpeg build and source format.

@@ -671,7 +671,7 @@ prepare_privileged_source() {
 install_privileged_files() {
   local filename staging_file
   sudo install -d -o root -g root -m 0755 "${PRIVILEGED_DIR}"
-  for filename in host-control-helper.py update-ubuntu.sh; do
+  for filename in host-control-helper.py update-ubuntu.sh sender-supervisor.py; do
     sudo test -f "${PRIVILEGED_SOURCE}/${filename}"
     sudo test ! -L "${PRIVILEGED_SOURCE}/${filename}"
     staging_file="$(sudo mktemp "${PRIVILEGED_DIR}/.install.XXXXXXXX")"

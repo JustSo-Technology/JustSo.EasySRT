@@ -227,6 +227,41 @@ sudo() { [[ "$1" == -u && "$2" == easysrt ]]; shift 2; command "$@"; }
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stdout.splitlines(), ['install --frozen-lockfile', 'build'])
 
+    def test_supervisor_install_and_legacy_rollback_assets(self):
+        for has_supervisor, needs_supervisor in [(True, True), (False, False), (False, True)]:
+            with self.subTest(has_supervisor=has_supervisor, needs_supervisor=needs_supervisor), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                source, installed, units = root / 'source', root / 'installed', root / 'units'
+                source.mkdir()
+                units.mkdir()
+                for name in ('host-control-helper.py', 'update-ubuntu.sh', 'justso-easysrt-helper.service',
+                             'justso-easysrt-backend.service', 'justso-easysrt-frontend.service', 'justso-easysrt-updater.service'):
+                    (source / name).write_text('fixture')
+                (source / 'easysrt-sender.service').write_text('ExecStart=sender-supervisor.py' if needs_supervisor else 'ExecStart=/bin/bash')
+                if has_supervisor:
+                    (source / 'sender-supervisor.py').write_text('supervisor fixture')
+                body = r'''
+sudo() {
+  local operation="$1"; shift
+  if [[ "$operation" == install ]]; then
+    local destination="${!#}" index=$(( $# - 1 )) origin
+    if [[ "$1" == -d ]]; then mkdir -p "$destination"; return; fi
+    origin="${!index}"
+    if [[ "$destination" == /etc/systemd/system/* ]]; then destination="$TEST_UNITS/${destination##*/}"; fi
+    cp "$origin" "$destination"
+  else
+    command "$operation" "$@"
+  fi
+}
+''' + function('update-ubuntu.sh', 'install_privileged_files') + '\ninstall_privileged_files'
+                result = self.run_shell(body, {**os.environ, 'PRIVILEGED_DIR': str(installed),
+                                              'PRIVILEGED_SOURCE': str(source), 'TEST_UNITS': str(units)})
+                self.assertEqual(result.returncode == 0, has_supervisor or not needs_supervisor, result.stderr)
+                if has_supervisor:
+                    self.assertEqual((installed / 'sender-supervisor.py').read_text(), 'supervisor fixture')
+                if not needs_supervisor:
+                    self.assertEqual((units / 'easysrt-sender.service').read_text(), 'ExecStart=/bin/bash')
+
     def test_token_cannot_change_clone_host(self):
         for script in ('install-ubuntu.sh', 'update-ubuntu.sh'):
             with self.subTest(script=script):

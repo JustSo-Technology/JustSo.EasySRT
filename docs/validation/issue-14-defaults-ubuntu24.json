@@ -1,0 +1,41 @@
+{
+  "passed": true,
+  "policy": {
+    "startup_seconds": 30,
+    "input_stall_seconds": 15,
+    "output_stall_seconds": 15,
+    "io_timeout_seconds": 10,
+    "retry_initial_seconds": 2,
+    "retry_max_seconds": 30,
+    "stable_seconds": 30
+  },
+  "cases": [
+    {
+      "video": false,
+      "fault": "input_stall",
+      "passed": true,
+      "reason": "input_error",
+      "detection_seconds": 14.998,
+      "restore_seconds": 7.95,
+      "attempts": 2,
+      "decoded_audio_bytes": 290304,
+      "applied_configuration_preserved": true
+    },
+    {
+      "video": true,
+      "fault": "input_stall",
+      "passed": true,
+      "reason": "input_error",
+      "detection_seconds": 14.788,
+      "restore_seconds": 8.049,
+      "attempts": 2,
+      "decoded_audio_bytes": 262656,
+      "applied_configuration_preserved": true
+    },
+    {
+      "fault": "second_instance_isolation",
+      "passed": true,
+      "attempts": 1
+    }
+  ]
+}

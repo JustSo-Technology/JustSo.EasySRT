@@ -500,6 +500,9 @@ create_backup() {
   sudo cp "${ENV_FILE}" "${BACKUP_PATH}/easysrt.env"
   sudo install -d -o root -g root -m 0700 "${BACKUP_PATH}/privileged"
   sudo cp "${PRIVILEGED_DIR}/host-control-helper.py" "${PRIVILEGED_DIR}/update-ubuntu.sh" "${BACKUP_PATH}/privileged/"
+  if [[ -f "${PRIVILEGED_DIR}/sender-supervisor.py" ]]; then
+    sudo cp "${PRIVILEGED_DIR}/sender-supervisor.py" "${BACKUP_PATH}/privileged/"
+  fi
   local unit
   for unit in justso-easysrt-helper justso-easysrt-backend justso-easysrt-frontend justso-easysrt-updater easysrt-sender; do
     sudo cp "/etc/systemd/system/${unit}.service" "${BACKUP_PATH}/privileged/"
@@ -691,7 +694,15 @@ prepare_privileged_source() {
 install_privileged_files() {
   local filename staging_file
   sudo install -d -o root -g root -m 0755 "${PRIVILEGED_DIR}" || return 1
-  for filename in host-control-helper.py update-ubuntu.sh; do
+  for filename in host-control-helper.py update-ubuntu.sh sender-supervisor.py; do
+    # Pre-supervisor backups remain valid rollback sources. Their unit still
+    # starts FFmpeg directly, so leave the unused supervisor file alone.
+    if [[ "${filename}" == sender-supervisor.py ]] && ! sudo test -f "${PRIVILEGED_SOURCE}/${filename}"; then
+      if sudo grep -q 'sender-supervisor.py' "${PRIVILEGED_SOURCE}/easysrt-sender.service"; then
+        return 1
+      fi
+      continue
+    fi
     sudo test -f "${PRIVILEGED_SOURCE}/${filename}" || return 1
     sudo test ! -L "${PRIVILEGED_SOURCE}/${filename}" || return 1
     staging_file="$(sudo mktemp "${PRIVILEGED_DIR}/.install.XXXXXXXX")" || return 1

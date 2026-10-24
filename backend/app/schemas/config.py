@@ -5,6 +5,8 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.schemas.recovery import RecoveryPolicy
+
 
 ALLOWED_INPUT_SCHEMES = {"http", "https", "udp", "rtp", "rtsp", "rtmp", "srt", "file"}
 ALLOWED_DESTINATION_SCHEMES = {"srt", "udp"}
@@ -175,6 +177,12 @@ class RuntimeConfig(BaseModel):
     service_name: str
     generated_from_station: str
     sender_env_path: str
+    schema_version: int = 1
+    ffmpeg_args: list[str] = Field(default_factory=list)
+    input_scheme: str = ""
+    recovery: RecoveryPolicy = Field(default_factory=RecoveryPolicy)
+    config_id: str = ""
+    summary: dict[str, str] = Field(default_factory=dict)
 
 
 class ConfigBundle(BaseModel):

@@ -1,4 +1,39 @@
 from pydantic import BaseModel, Field
+from typing import Literal
+
+
+class MediaCounter(BaseModel):
+    value: int = Field(default=0, ge=0)
+    last_progress_at: str | None = None
+    age_seconds: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+
+
+class SenderHealth(BaseModel):
+    state: Literal["stopped", "connecting", "healthy", "degraded", "retrying", "unknown"] = "unknown"
+    reason: str = "unavailable"
+    detail: str = "Media health is unavailable."
+    run_id: str | None = None
+    supervisor_pid: int | None = None
+    child_pid: int | None = Field(default=None, ge=1)
+    invocation_id: str = ""
+    config_id: str | None = None
+    summary: dict[str, str] = Field(default_factory=dict)
+    input: MediaCounter = Field(default_factory=MediaCounter)
+    output: MediaCounter = Field(default_factory=MediaCounter)
+    attempt: int = Field(default=0, ge=0)
+    retry_count: int = Field(default=0, ge=0)
+    next_retry_at: str | None = None
+    last_failure_at: str | None = None
+    last_recovery_at: str | None = None
+    last_exit_code: int | None = None
+    heartbeat_at: str | None = None
+    heartbeat_monotonic: float = Field(default=0, ge=0, allow_inf_nan=False)
+    remote_receipt: Literal["unverified"] = "unverified"
+    desired_running: bool = False
+    pending_config: bool = False
+    policy: dict[str, float] = Field(default_factory=dict)
+    events: list[dict] = Field(default_factory=list, max_length=20)
+    stderr_tail: list[str] = Field(default_factory=list, max_length=8)
 
 
 class ServiceStatus(BaseModel):
@@ -12,6 +47,7 @@ class ServiceStatus(BaseModel):
     last_command: str | None = None
     last_exit_code: int | None = None
     stderr_tail: str | None = None
+    media: SenderHealth = Field(default_factory=SenderHealth)
 
 
 class LogResponse(BaseModel):

@@ -9,11 +9,13 @@ from app.api import auth, config, config_transfer, diagnostics, logs, redundancy
 from app.core.db import init_db
 from app.core.settings import settings
 from app.services.security import decode_session_token, verify_csrf_token
+from app.services.config_service import migrate_legacy_runtime
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    migrate_legacy_runtime()
     yield
 
 
