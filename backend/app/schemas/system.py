@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Literal
+from app.schemas.config import ConfigBundle, SelectionSummary
 
 
 class MediaCounter(BaseModel):
@@ -17,6 +18,7 @@ class SenderHealth(BaseModel):
     child_pid: int | None = Field(default=None, ge=1)
     invocation_id: str = ""
     config_id: str | None = None
+    snapshot_id: str | None = None
     summary: dict[str, str] = Field(default_factory=dict)
     input: MediaCounter = Field(default_factory=MediaCounter)
     output: MediaCounter = Field(default_factory=MediaCounter)
@@ -48,6 +50,9 @@ class ServiceStatus(BaseModel):
     last_exit_code: int | None = None
     stderr_tail: str | None = None
     media: SenderHealth = Field(default_factory=SenderHealth)
+    selected: SelectionSummary | None = None
+    running_config: ConfigBundle | None = None
+    pending_configuration: bool | None = None
 
 
 class LogResponse(BaseModel):

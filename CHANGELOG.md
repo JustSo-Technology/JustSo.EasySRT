@@ -4,6 +4,13 @@ This project follows Semantic Versioning and uses tags prefixed with `v`.
 
 ## Unreleased
 
+- Separated preset Save/Open from explicit Apply, with revision conflicts,
+  immutable selected/running snapshots, and independent apply/service permissions.
+- Pinned Start/Restart to a reviewed selection; automatic recovery retains the
+  current run after subsequent edits or application. Retired implicit activation
+  through legacy Load and direct site writes; added database migration and
+  recoverable generation publication.
+
 - Added versioned configuration export, April-format migration and reviewed,
   transactional preset import without changing the active stream.
 - Added explicit legacy SRT latency review, redacted previews and stale-preview

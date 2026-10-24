@@ -169,17 +169,26 @@ def _format_host_for_url(host: str) -> str:
 
 
 def load_persisted_runtime_config() -> RuntimeConfig | None:
+    from app.services.config_snapshots import read_selected
+    selected = read_selected()
+    if selected:
+        return selected.runtime
     runtime_payload = _read_json(settings.runtime_config_path)
     if not runtime_payload:
         return None
     return RuntimeConfig.model_validate(runtime_payload)
 
 
-def load_bundle() -> ConfigBundle:
+def load_legacy_bundle() -> ConfigBundle:
     app_config = AppConfig.model_validate(_read_json(settings.app_config_path) or DEFAULT_APP.model_dump())
     site_config = SiteConfig.model_validate(_read_json(settings.site_config_path) or DEFAULT_SITE.model_dump())
     runtime = build_runtime_config(app_config, site_config)
     return ConfigBundle(app=app_config, site=site_config, runtime=runtime)
+
+
+def load_bundle() -> ConfigBundle:
+    from app.services.config_snapshots import read_selected
+    return read_selected() or load_legacy_bundle()
 
 
 def save_bundle(app_config: AppConfig, site_config: SiteConfig) -> ConfigBundle:
@@ -196,6 +205,9 @@ def save_bundle(app_config: AppConfig, site_config: SiteConfig) -> ConfigBundle:
 
 def migrate_legacy_runtime() -> None:
     """Refresh legacy candidates or changed host policy, never an applied run."""
+    from app.services.config_snapshots import read_selected
+    if read_selected():
+        return
     try:
         payload = _read_json(settings.runtime_config_path)
         if isinstance(payload, dict) and payload.get("ffmpeg_command") and (
@@ -209,125 +221,96 @@ def migrate_legacy_runtime() -> None:
         return
 
 
-def _saved_config_summary(record: SavedSiteConfigRecord, is_active: bool = False) -> SavedSiteConfigSummary:
-    return SavedSiteConfigSummary(
-        id=record.id,
-        name=record.name,
-        created_at=record.created_at,
-        updated_at=record.updated_at,
-        last_loaded_at=record.last_loaded_at,
-        is_active=is_active,
-    )
+def _saved_config_summary(record: SavedSiteConfigRecord) -> SavedSiteConfigSummary:
+    return SavedSiteConfigSummary(id=record.id, name=record.name, revision=record.revision,
+                                  created_at=record.created_at, updated_at=record.updated_at)
 
 
-def _get_or_create_site_config_state(session: Session) -> SiteConfigState:
-    state = session.get(SiteConfigState, "default")
-    if state is None:
-        state = SiteConfigState()
-        session.add(state)
-        session.flush()
-        session.refresh(state)
-    return state
+def get_preset(session: Session, preset_id: str) -> SavedSiteConfigRecord:
+    record = session.get(SavedSiteConfigRecord, preset_id)
+    if record is None:
+        raise HTTPException(404, "Preset not found")
+    return record
+
+
+def check_revision(record: SavedSiteConfigRecord, expected: int | None):
+    if expected is None:
+        raise HTTPException(428, "Expected preset revision is required; open the preset again")
+    if record.revision != expected:
+        raise HTTPException(409, "Preset changed; open and review it again before saving or applying")
 
 
 def list_saved_site_configs(session: Session) -> list[SavedSiteConfigSummary]:
-    state = session.get(SiteConfigState, "default")
     records = session.exec(select(SavedSiteConfigRecord).order_by(SavedSiteConfigRecord.updated_at.desc())).all()
-    return [_saved_config_summary(record, is_active=state is not None and record.id == state.active_saved_config_id) for record in records]
+    return [_saved_config_summary(record) for record in records]
 
 
-def save_named_site_config(
-    session: Session,
-    name: str,
-    site_config: SiteConfig,
-    app_config: AppConfig,
-    created_by_user_id: str | None = None,
-    overwrite: bool = False,
-):
-    normalized_name = name.strip()
-    record = session.exec(select(SavedSiteConfigRecord).where(SavedSiteConfigRecord.name == normalized_name)).first()
-    now = datetime.now(timezone.utc)
-    if record is None:
-        record = SavedSiteConfigRecord(
-            name=normalized_name,
-            site_payload=json.dumps(site_config.model_dump()),
-            created_by_user_id=created_by_user_id,
-            created_at=now,
-            updated_at=now,
-        )
-    else:
-        if not overwrite:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A saved config with that name already exists")
-        record.site_payload = json.dumps(site_config.model_dump())
-        record.updated_at = now
-        if created_by_user_id is not None:
-            record.created_by_user_id = created_by_user_id
-    bundle = save_bundle(app_config, site_config)
-    session.add(record)
-    session.flush()
-    session.refresh(record)
-    state = _get_or_create_site_config_state(session)
-    state.active_saved_config_id = record.id
-    state.updated_at = now
-    session.add(state)
-    session.commit()
-    return _saved_config_summary(record, is_active=True), bundle
-
-
-def load_saved_site_config(session: Session, saved_config_id: str, app_config: AppConfig) -> ConfigBundle:
-    record = session.get(SavedSiteConfigRecord, saved_config_id)
-    if record is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Saved config not found")
-    site_config = SiteConfig.model_validate(json.loads(record.site_payload))
-    bundle = save_bundle(app_config, site_config)
-    now = datetime.now(timezone.utc)
-    record.last_loaded_at = now
-    session.add(record)
-    state = _get_or_create_site_config_state(session)
-    state.active_saved_config_id = record.id
-    state.updated_at = now
-    session.add(state)
-    session.commit()
-    return bundle
-
-
-def rename_saved_site_config(session: Session, saved_config_id: str, name: str) -> SavedSiteConfigSummary:
-    record = session.get(SavedSiteConfigRecord, saved_config_id)
-    if record is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Saved config not found")
+def save_named_site_config(session: Session, name: str, site_config: SiteConfig,
+                           created_by_user_id: str | None = None):
     normalized_name = name.strip()
     existing = session.exec(select(SavedSiteConfigRecord).where(SavedSiteConfigRecord.name == normalized_name)).first()
-    if existing is not None and existing.id != record.id:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A saved config with that name already exists")
-    record.name = normalized_name
+    if existing:
+        raise HTTPException(409, "A preset with that name already exists; open it before overwriting")
+    record = SavedSiteConfigRecord(name=normalized_name, site_payload=site_config.model_dump_json(),
+                                   created_by_user_id=created_by_user_id)
+    session.add(record)
+    session.flush()
+    return _saved_config_summary(record)
+
+
+def update_saved_site_config(session: Session, preset_id: str, site: SiteConfig, expected_revision: int | None):
+    record = get_preset(session, preset_id)
+    check_revision(record, expected_revision)
+    record.site_payload = site.model_dump_json()
+    record.revision += 1
     record.updated_at = datetime.now(timezone.utc)
     session.add(record)
-    session.commit()
-    session.refresh(record)
-    state = _get_or_create_site_config_state(session)
-    return _saved_config_summary(record, is_active=record.id == state.active_saved_config_id)
+    session.flush()
+    return _saved_config_summary(record)
 
 
-def delete_saved_site_config(session: Session, saved_config_id: str) -> None:
-    record = session.get(SavedSiteConfigRecord, saved_config_id)
-    if record is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Saved config not found")
-    state = _get_or_create_site_config_state(session)
-    if state.active_saved_config_id == record.id:
+def rename_saved_site_config(session: Session, preset_id: str, name: str, expected_revision: int | None):
+    record = get_preset(session, preset_id)
+    check_revision(record, expected_revision)
+    name = name.strip()
+    existing = session.exec(select(SavedSiteConfigRecord).where(SavedSiteConfigRecord.name == name)).first()
+    if existing and existing.id != record.id:
+        raise HTTPException(409, "A preset with that name already exists")
+    record.name = name
+    record.revision += 1
+    record.updated_at = datetime.now(timezone.utc)
+    session.add(record)
+    session.flush()
+    return _saved_config_summary(record)
+
+
+def delete_saved_site_config(session: Session, preset_id: str, expected_revision: int | None):
+    record = get_preset(session, preset_id)
+    check_revision(record, expected_revision)
+    state = session.get(SiteConfigState, "default")
+    if state and state.active_saved_config_id == record.id:
         state.active_saved_config_id = None
-        state.updated_at = datetime.now(timezone.utc)
         session.add(state)
     session.delete(record)
-    session.commit()
+    session.flush()
 
 
-def clear_active_saved_site_config(session: Session) -> None:
-    state = _get_or_create_site_config_state(session)
-    if state.active_saved_config_id is not None:
-        state.active_saved_config_id = None
-        state.updated_at = datetime.now(timezone.utc)
-        session.add(state)
-        session.commit()
+def preview_preset(session: Session, preset_id: str, expected_revision: int | None = None):
+    from app.schemas.config import SavedSiteConfigDetail
+    from app.services.config_snapshots import digest, read_app_settings
+    record = get_preset(session, preset_id)
+    if expected_revision is not None:
+        check_revision(record, expected_revision)
+    app = read_app_settings()
+    site = SiteConfig.model_validate_json(record.site_payload)
+    try:
+        runtime = build_runtime_config(app, site)
+    except ValueError:
+        raise HTTPException(422, "Preset is incompatible with current sender settings") from None
+    selected = load_bundle().selected
+    return SavedSiteConfigDetail(saved_config=_saved_config_summary(record),
+        bundle=ConfigBundle(app=app, site=site, runtime=runtime), app_digest=digest(app.model_dump()),
+        runtime_digest=digest(runtime.model_dump()), expected_selection_id=selected.id if selected else None)
 
 
 def list_saved_inputs(session: Session) -> list[SavedInputEntry]:

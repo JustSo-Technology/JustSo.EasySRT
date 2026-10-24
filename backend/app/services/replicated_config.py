@@ -18,12 +18,15 @@ def _local_node_name() -> str:
     return platform.node() or "local-node"
 
 
-def _get_or_create_partner_state(session: Session) -> PartnerSyncState:
+def _get_or_create_partner_state(session: Session, *, commit: bool = True) -> PartnerSyncState:
     partner_state = session.get(PartnerSyncState, "partner")
     if partner_state is None:
         partner_state = PartnerSyncState()
         session.add(partner_state)
-        session.commit()
+        if commit:
+            session.commit()
+        else:
+            session.flush()
         session.refresh(partner_state)
     return partner_state
 
@@ -32,10 +35,10 @@ def _snapshot_state(app_config: AppConfig, site_config: SiteConfig) -> tuple[str
     return json.dumps(app_config.model_dump()), json.dumps(site_config.model_dump())
 
 
-def ensure_replicated_config_state(session: Session) -> ReplicatedConfigState:
+def ensure_replicated_config_state(session: Session, *, commit: bool = True) -> ReplicatedConfigState:
     state = session.get(ReplicatedConfigState, "default")
     if state is not None:
-        _get_or_create_partner_state(session)
+        _get_or_create_partner_state(session, commit=commit)
         return state
 
     bundle = load_bundle()
@@ -61,8 +64,11 @@ def ensure_replicated_config_state(session: Session) -> ReplicatedConfigState:
     )
     session.add(state)
     session.add(version_record)
-    _get_or_create_partner_state(session)
-    session.commit()
+    _get_or_create_partner_state(session, commit=commit)
+    if commit:
+        session.commit()
+    else:
+        session.flush()
     session.refresh(state)
     return state
 
@@ -74,9 +80,10 @@ def record_replicated_config_change(
     site_config: SiteConfig,
     changed_by_user_id: str | None,
     change_summary: str,
+    commit: bool = True,
 ) -> ReplicatedConfigState:
-    state = ensure_replicated_config_state(session)
-    partner_state = _get_or_create_partner_state(session)
+    state = ensure_replicated_config_state(session, commit=commit)
+    partner_state = _get_or_create_partner_state(session, commit=commit)
     now = _utcnow()
     next_version = state.current_version + 1
     app_payload, site_payload = _snapshot_state(app_config, site_config)
@@ -106,7 +113,10 @@ def record_replicated_config_change(
     session.add(version_record)
     session.add(state)
     session.add(partner_state)
-    session.commit()
+    if commit:
+        session.commit()
+    else:
+        session.flush()
     session.refresh(state)
     return state
 

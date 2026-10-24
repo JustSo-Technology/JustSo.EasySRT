@@ -122,13 +122,13 @@ def test_sender_restart_stops_before_pinning_and_starting(helper, monkeypatch, t
     calls = []
     monkeypatch.setattr(helper, "SOCKET_PATH", tmp_path / "helper.sock")
     monkeypatch.setattr(helper, "_sender_status", lambda: {"service_state": "active"})
-    monkeypatch.setattr(helper, "_pin_sender_runtime", lambda fd: calls.append("pin"))
+    monkeypatch.setattr(helper, "_pin_sender_runtime", lambda fd, expected, **kw: calls.append("validate" if kw.get("validate_only") else "pin"))
     def run(command, **kwargs):
         calls.append(command[1])
         return subprocess.CompletedProcess(command, 0, "", "")
     monkeypatch.setattr(helper, "_run_command", run)
-    helper._service_action("restart")
-    assert calls == ["daemon-reload", "stop", "pin", "reset-failed", "start"]
+    helper._service_action("restart", {"expected_snapshot_id": "11111111-1111-1111-1111-111111111111"})
+    assert calls == ["daemon-reload", "validate", "stop", "pin", "reset-failed", "start"]
 
 
 def test_failed_stop_never_pins_or_starts_replacement(helper, monkeypatch, tmp_path):
@@ -138,8 +138,9 @@ def test_failed_stop_never_pins_or_starts_replacement(helper, monkeypatch, tmp_p
     pin = Mock()
     monkeypatch.setattr(helper, "_pin_sender_runtime", pin)
     with pytest.raises(helper.HelperRequestError, match="could not be stopped"):
-        helper._service_action("restart")
-    pin.assert_not_called()
+        helper._service_action("restart", {"expected_snapshot_id": "11111111-1111-1111-1111-111111111111"})
+    pin.assert_called_once()
+    assert pin.call_args.kwargs == {"validate_only": True}
 
 
 def test_helper_commands_have_a_deadline(helper, monkeypatch):

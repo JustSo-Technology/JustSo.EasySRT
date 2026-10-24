@@ -143,7 +143,7 @@ class Supervisor:
         self.status = {
             "schema_version": 1, "path_id": "default", "run_id": uuid.uuid4().hex,
             "supervisor_pid": os.getpid(), "invocation_id": os.environ.get("INVOCATION_ID", ""),
-            "config_id": runtime["config_id"], "summary": runtime.get("summary", {}),
+            "config_id": runtime["config_id"], "snapshot_id": runtime.get("snapshot_id"), "summary": runtime.get("summary", {}),
             "policy": self.policy, "state": "connecting", "reason": "starting",
             "attempt": 0, "retry_count": 0, "next_retry_at": None,
             "last_failure_at": None, "last_recovery_at": None, "last_exit_code": None,

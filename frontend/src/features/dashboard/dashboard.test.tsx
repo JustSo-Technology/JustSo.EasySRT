@@ -33,19 +33,19 @@ afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 it("never declares an active process healthy without media evidence", () => {
   render(<Dashboard config={config} status={status} onAction={vi.fn()} isActionPending={false} />);
-  expect(screen.getByText("Unknown")).toBeTruthy();
+  expect(screen.getAllByText("Unknown")[0]).toBeTruthy();
   expect(screen.queryByText("Streaming now")).toBeNull();
   expect(screen.queryByText(/Healthy ·/)).toBeNull();
-  expect(screen.getByText(/The applied live route is unverified/)).toBeTruthy();
+  expect(screen.getByText(/running configuration is unknown/)).toBeTruthy();
 });
 
 it("shows the applied route and keeps Stop usable throughout retries", () => {
   const action = vi.fn().mockResolvedValue(undefined);
-  render(<Dashboard config={config} status={{ ...status, media: { ...media, state: "retrying", pending_config: true,
+  render(<Dashboard config={config} status={{ ...status, pending_configuration: true, media: { ...media, state: "retrying", pending_config: true,
     retry_count: 3, next_retry_at: new Date(Date.now() + 5000).toISOString() } }} onAction={action} isActionPending={false} />);
   expect(screen.getByText("Applied source")).toBeTruthy();
   expect(screen.getByText("srt://applied.test:9000")).toBeTruthy();
-  expect(screen.getByText(/Saved settings are waiting for Restart/)).toBeTruthy();
+  expect(screen.getByText(/Selected configuration is awaiting Start\/Restart/)).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Stop" }));
   expect(action).toHaveBeenCalledWith("stop");
 });
@@ -59,5 +59,18 @@ it("withdraws healthy status when polling fails or evidence ages out", () => {
   expect(screen.queryByText("Healthy · local media progressing")).toBeNull();
   view.rerender(<Dashboard {...props} />);
   act(() => vi.advanceTimersByTime(8000));
-  expect(screen.getByText("Unknown")).toBeTruthy();
+  expect(screen.getAllByText("Unknown")[0]).toBeTruthy();
+});
+
+it("shows different selected/running revisions and reviews Restart explicitly", async () => {
+  const action = vi.fn().mockResolvedValue(undefined);
+  const selected = { id: "b", source_preset_id: "preset", source_revision: 2, source_name: "Tomorrow", target: "default", created_at: "2026-10-24T00:00:00Z" };
+  const running = { ...config, selected: { ...selected, id: "a", source_revision: 1, source_name: "Today" } };
+  render(<Dashboard config={{ ...config, selected }} status={{ ...status, media, running_config: running, pending_configuration: true }} onAction={action} isActionPending={false} />);
+  expect(screen.getByText(/Selected: Tomorrow · revision 2/)).toBeTruthy();
+  expect(screen.getByText(/Running configuration: Today · revision 1/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Restart" }));
+  expect(action).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Confirm Restart" }));
+  expect(action).toHaveBeenCalledWith("restart", "b");
 });

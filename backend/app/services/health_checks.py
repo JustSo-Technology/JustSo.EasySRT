@@ -128,7 +128,7 @@ def check_runtime_config_health(bundle: ConfigBundle | None = None) -> Diagnosti
     if persisted_runtime is None:
         return _check_error("runtime-config", "runtime", "runtime_config.json is missing")
     bundle = bundle or load_bundle()
-    expected = build_runtime_config(bundle.app, bundle.site)
+    expected = build_runtime_config(bundle.app, bundle.site).model_copy(update={"snapshot_id": bundle.runtime.snapshot_id})
     if persisted_runtime != expected:
         return _check_error("runtime-config", "runtime", "runtime_config.json does not match derived runtime")
     return _make_check(
@@ -143,7 +143,8 @@ def check_runtime_config_health(bundle: ConfigBundle | None = None) -> Diagnosti
 
 def check_sender_env_health(expected_runtime: RuntimeConfig | None = None) -> DiagnosticCheck:
     expected_runtime = expected_runtime or load_bundle().runtime
-    env_path = settings.sender_env_path
+    from app.services.config_snapshots import generation_path
+    env_path = generation_path(expected_runtime.snapshot_id) / "sender.env" if expected_runtime.snapshot_id else settings.sender_env_path
     if not env_path.exists():
         return _check_error("sender-env", "runtime", "sender.env is missing")
     env_text = env_path.read_text()

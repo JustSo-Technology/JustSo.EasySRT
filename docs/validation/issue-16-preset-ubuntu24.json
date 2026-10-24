@@ -1,0 +1,46 @@
+{
+  "passed": true,
+  "cases": [
+    {
+      "case": "upgrade_and_apply_preserve_legacy_run_with_unknown_identity",
+      "passed": true
+    },
+    {
+      "case": "save_and_open_preserve_live_and_selected",
+      "passed": true
+    },
+    {
+      "case": "apply_only_selects_pending_configuration",
+      "passed": true
+    },
+    {
+      "case": "stop_during_retry_with_failed_preflight",
+      "passed": true
+    },
+    {
+      "case": "supervisor_crash_cgroup_cleanup_and_applied_runtime",
+      "passed": true
+    },
+    {
+      "case": "explicit_restart_uses_selected_revision_and_decodes_audio",
+      "passed": true,
+      "decoded_audio_bytes": 317952
+    },
+    {
+      "case": "deleting_selected_preset_preserves_snapshots",
+      "passed": true
+    },
+    {
+      "case": "helper_restart_preserves_live_sender",
+      "passed": true
+    },
+    {
+      "case": "direct_systemctl_stop_stays_stopped",
+      "passed": true
+    },
+    {
+      "case": "stop_during_startup",
+      "passed": true
+    }
+  ]
+}

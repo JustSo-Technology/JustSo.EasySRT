@@ -13,7 +13,7 @@ from sqlmodel import Session, select
 
 from app.core.settings import settings
 from app.models.auth import User
-from app.models.site_config import SavedDestinationRecord, SavedInputRecord, SavedSiteConfigRecord, SiteConfigState
+from app.models.site_config import SavedDestinationRecord, SavedInputRecord, SavedSiteConfigRecord, SiteConfigState, SelectedConfigState
 from app.schemas.config import AppConfig, Destination, InputSource, StreamProfile
 from app.services.config_service import load_bundle
 from app.version import APP_VERSION, installed_commit
@@ -184,6 +184,7 @@ def _hash(value):
 def _state(session):
     rows = {kind: sorted([r.model_dump(mode="json") for r in session.exec(select(model)).all()], key=lambda r: r["id"]) for kind, model in MODELS.items()}
     rows["selection"] = [r.model_dump(mode="json") for r in session.exec(select(SiteConfigState)).all()]
+    rows["selected_snapshots"] = [r.model_dump(mode="json") for r in session.exec(select(SelectedConfigState)).all()]
     rows["files"] = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() if p.exists() else None for p in
                      [settings.app_config_path, settings.site_config_path, settings.runtime_config_path, settings.sender_env_path]}
     return _hash(rows)
@@ -210,7 +211,6 @@ def _plan(session: Session, request: ImportRequest):
     if len(decisions) != len(request.decisions) or set(decisions) - {i["key"] for i in items}:
         invalid("Duplicate or unknown import decision")
     errors, chosen = [], set()
-    active = session.get(SiteConfigState, "default")
     for item in items:
         decision = decisions.get(item["key"])
         name = _name(decision.name) if decision and decision.name is not None else item["name"]
@@ -231,8 +231,6 @@ def _plan(session: Session, request: ImportRequest):
                 errors.append(f'{item["key"]}: name already exists; skip, rename or explicitly replace')
             if action == "replace" and not target:
                 errors.append(f'{item["key"]}: replacement target no longer exists')
-            if action == "replace" and item["kind"] == "preset" and active and target and active.active_saved_config_id == target.id:
-                errors.append(f'{item["key"]}: active preset cannot be replaced; import under a different name')
             identity = (item["kind"], name)
             if identity in chosen:
                 errors.append(f'{item["key"]}: duplicate target name in this import')
@@ -249,8 +247,9 @@ def _serializer():
     return URLSafeTimedSerializer(settings.secret_key, salt="easysrt-config-import-v1")
 
 
-def preview(session: Session, request: ImportRequest, user: User):
+def preview(session: Session, request: ImportRequest, user: User, principal=None):
     items, warnings, errors = _plan(session, request)
+    authorize_items(items, principal)
     state = _state(session)
     token = _serializer().dumps({"user": user.id, "plan": _hash(items), "state": state,
                                  "request": _hash({"document": request.document, "decisions": [d.model_dump() for d in request.decisions]})})
@@ -258,7 +257,19 @@ def preview(session: Session, request: ImportRequest, user: User):
     return {"items": public, "warnings": warnings, "errors": errors, "can_import": not errors and any(i["action"] != "skip" for i in items), "preview_token": token}
 
 
-def commit_import(session: Session, request: ImportRequest, user: User):
+def authorize_items(items, principal):
+    if principal is None:
+        return
+    for item in items:
+        if item["action"] == "skip":
+            principal.require("presets:read", preset_id=item["target_id"])
+        elif item["kind"] == "preset":
+            principal.require("presets:update" if item["action"] == "replace" else "presets:create", preset_id=item["target_id"])
+        else:
+            principal.require("inputs:create" if item["kind"] == "input" else "destinations:create")
+
+
+def commit_import(session: Session, request: ImportRequest, user: User, principal=None):
     try:
         claims = _serializer().loads(request.preview_token or "", max_age=PREVIEW_TTL)
     except (BadSignature, SignatureExpired):
@@ -267,6 +278,7 @@ def commit_import(session: Session, request: ImportRequest, user: User):
     session.connection().exec_driver_sql("BEGIN IMMEDIATE")
     try:
         items, _, errors = _plan(session, request)
+        authorize_items(items, principal)
         expected = {"user": user.id, "plan": _hash(items), "state": _state(session),
                     "request": _hash({"document": request.document, "decisions": [d.model_dump() for d in request.decisions]})}
         if claims != expected:
@@ -282,6 +294,8 @@ def commit_import(session: Session, request: ImportRequest, user: User):
             setattr(record, PAYLOADS[item["kind"]], json.dumps(item["payload"]))
             record.updated_at = datetime.now(timezone.utc)
             if item["kind"] == "preset":
+                if item["target_id"]:
+                    record.revision += 1
                 record.created_by_user_id = user.id
             session.add(record)
             imported.append({"key": item["key"], "id": record.id, "kind": item["kind"], "name": redact(item["name"])})

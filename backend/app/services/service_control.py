@@ -1,8 +1,9 @@
 import sys
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 
-from fastapi import status
+from fastapi import status, HTTPException
 
 from app.core.settings import settings
 from app.models.auth import User
@@ -10,7 +11,10 @@ from app.schemas.system import DiagnosticCheck, ServiceStatus
 from app.services.health_checks import collect_preflight_checks
 from app.services.host_control import HostControlError, request_helper
 from app.services.sender_health import read_sender_health
-from app.services.config_service import load_bundle
+from app.services.config_snapshots import target_lock, bundle_for, read_selected
+from app.core.db import get_engine
+from app.models.site_config import ConfigSnapshot
+from sqlmodel import Session
 
 
 @dataclass
@@ -99,17 +103,40 @@ def _read_service_state(user: User | None) -> tuple[str, str, dict]:
 
 
 def _snapshot_status(user: User | None = None, *, context: CommandContext | None = None) -> ServiceStatus:
-    checks = collect_preflight_checks()
+    try:
+        checks = collect_preflight_checks()
+    except (OSError, ValueError, HTTPException):
+        checks = [DiagnosticCheck(name="selected-config", ok=False, detail="Selected configuration is unavailable",
+                                  category="runtime", blocking=True, severity="critical")]
     service_state, detail, result = _read_service_state(user)
     snapshot = _service_status_from_result(service_state, detail, checks=checks, context=context)
     snapshot.media = read_sender_health(service_state, result)
-    if snapshot.media.config_id and snapshot.preflight_ok and service_state in {"active", "activating"}:
-        snapshot.media.pending_config = snapshot.media.config_id != load_bundle().runtime.config_id
+    try:
+        selected_bundle = read_selected()
+    except (OSError, ValueError, HTTPException):
+        selected_bundle = None
+    selected = selected_bundle.selected if selected_bundle else None
+    snapshot.selected = selected
+    if snapshot.media.snapshot_id and service_state in {"active", "activating"}:
+        with Session(get_engine()) as session:
+            record = session.get(ConfigSnapshot, snapshot.media.snapshot_id)
+            if record:
+                snapshot.running_config = bundle_for(record)
+        if selected and snapshot.running_config:
+            snapshot.pending_configuration = selected.id != snapshot.media.snapshot_id
+    elif service_state == "inactive":
+        snapshot.pending_configuration = False
+    snapshot.media.pending_config = snapshot.pending_configuration is True
     return snapshot
 
 
 def get_service_status(user: User | None = None) -> ServiceStatus:
-    return _snapshot_status(user)
+    with ExitStack() as stack:
+        try:
+            stack.enter_context(target_lock())
+        except OSError:
+            pass
+        return _snapshot_status(user)
 
 
 def _raise_action_failure(status_code: int, snapshot: ServiceStatus) -> None:
@@ -127,12 +154,32 @@ def _validate_transition(action: str, snapshot: ServiceStatus) -> None:
         _raise_action_failure(status.HTTP_409_CONFLICT, snapshot)
 
 
-def perform_service_action(action: str, user: User | None = None) -> ServiceStatus:
+def perform_service_action(action: str, user: User | None = None, *, expected_selection_id: str | None = None) -> ServiceStatus:
+    # Stop never depends on publishing or validating a configuration. The helper
+    # also serializes service commands if the data filesystem is unavailable.
+    if action == "stop":
+        with ExitStack() as stack:
+            try:
+                stack.enter_context(target_lock())
+            except OSError:
+                pass
+            return _perform_service_action(action, user, None)
+    with target_lock():
+        selected_bundle = read_selected()
+        selected = selected_bundle.selected if selected_bundle else None
+        if expected_selection_id is None:
+            raise HTTPException(428, "Review and provide the selected configuration before Start/Restart")
+        if selected is None or selected.id != expected_selection_id:
+            raise HTTPException(409, "Selected configuration changed; review it again before Start/Restart")
+        return _perform_service_action(action, user, expected_selection_id)
+
+
+def _perform_service_action(action: str, user: User | None, expected_selection_id: str | None) -> ServiceStatus:
     snapshot = _snapshot_status(user)
     _validate_transition(action, snapshot)
     helper_action = {"start": "sender_start", "stop": "sender_stop", "restart": "sender_restart"}[action]
     try:
-        result = request_helper(helper_action, actor=user)
+        result = request_helper(helper_action, actor=user, payload={"expected_snapshot_id": expected_selection_id})
     except HostControlError as exc:
         details = exc.details or {}
         context = CommandContext(
