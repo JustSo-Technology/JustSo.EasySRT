@@ -15,6 +15,7 @@ export function AuthPage({
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(mode: "login" | "bootstrap") {
@@ -23,6 +24,10 @@ export function AuthPage({
       if (mode === "login") {
         await onLogin(username, password);
       } else {
+        if (!password || password !== confirmPassword) {
+          setError("Enter matching passwords to create the admin account.");
+          return;
+        }
         await onBootstrap(username, password);
       }
     } catch (err) {
@@ -59,17 +64,29 @@ export function AuthPage({
             </Field>
             <Field label="Password">
               <Input
+                autoComplete={hasOwner ? "current-password" : "new-password"}
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="Enter a strong password"
               />
             </Field>
+            {!hasOwner && (
+              <Field label="Confirm password">
+                <Input
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  placeholder="Re-enter your password"
+                />
+              </Field>
+            )}
           </div>
           <div className="rounded-[22px] border border-white/10 bg-black/20 p-4 text-sm text-slate-300">
             This control plane should only be accessible from trusted networks.
           </div>
-          {error ? <p className="rounded-2xl border border-rose-300/20 bg-rose-300/10 px-4 py-3 text-sm text-rose-200">{error}</p> : null}
+          {error ? <p role="alert" className="rounded-2xl border border-rose-300/20 bg-rose-300/10 px-4 py-3 text-sm text-rose-200">{error}</p> : null}
           <Button className="w-full justify-center" onClick={() => handleSubmit(hasOwner ? "login" : "bootstrap")}>
             {hasOwner ? "Sign in" : "Create admin account"}
           </Button>
