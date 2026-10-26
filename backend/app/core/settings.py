@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     helper_socket_path: Path = Path("/run/justso-easysrt/helper.sock")
     helper_request_timeout_seconds: float = 35.0
     github_token: str | None = None
+    api_requests_per_minute: int = 120
+    api_commands_per_minute: int = 6
+    api_instance_requests_per_minute: int = 1200
+    api_instance_commands_per_minute: int = 60
+    api_audit_retention_days: int = 90
+    api_command_retention_hours: int = 24
     session_cookie_name: str = "easysrt_session"
     session_max_age_seconds: int = 60 * 60 * 12
     session_cookie_secure: bool = False

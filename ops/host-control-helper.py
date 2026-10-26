@@ -88,7 +88,7 @@ def _tail_text(stdout: str, stderr: str) -> str | None:
 def _actor_label(actor: dict[str, Any]) -> str:
     username = actor.get("username") or "unknown"
     role = actor.get("role") or "unknown"
-    return f"{username} ({role})"
+    return f"{username} ({role}) api_token={str(actor.get('api_token_id') or 'session')[:36]}"
 
 
 def _sender_status() -> dict[str, Any]:

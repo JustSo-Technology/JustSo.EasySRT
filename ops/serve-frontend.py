@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import http.server
+import ipaddress
 import os
 import socket
 import urllib.error
@@ -31,12 +32,24 @@ TRUSTED_HOSTS = {
 }
 
 
+TRUSTED_PROXY_CIDRS = [ipaddress.ip_network(value.strip()) for value in
+    os.environ.get("EASYSRT_FRONTEND_TRUSTED_PROXY_CIDRS", "127.0.0.1/32,::1/128").split(",") if value.strip()]
+
+
+def trusted_proxy(address):
+    try:
+        peer = ipaddress.ip_address(address)
+        return any(peer in network for network in TRUSTED_PROXY_CIDRS)
+    except ValueError:
+        return False
+
+
 class SpaRequestHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, directory: str, **kwargs):
         super().__init__(*args, directory=directory, **kwargs)
 
     def end_headers(self) -> None:
-        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Cache-Control", "no-store" if self.path.startswith("/api/v1/") else "no-cache")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
@@ -137,13 +150,14 @@ class SpaRequestHandler(http.server.SimpleHTTPRequestHandler):
         headers = {
             key: value
             for key, value in self.headers.items()
-            if key.lower() not in {"host", "x-forwarded-host", "x-forwarded-proto"}
+            if key.lower() not in HOP_BY_HOP_HEADERS | {"host", "x-forwarded-host", "x-forwarded-proto", "x-forwarded-for"}
         }
-        forwarded_proto = self.headers.get("X-Forwarded-Proto", "http").split(",", 1)[0].strip().lower()
+        forwarded_proto = self.headers.get("X-Forwarded-Proto", "http").split(",", 1)[0].strip().lower() if trusted_proxy(self.client_address[0]) else "http"
         if forwarded_proto not in {"http", "https"}:
             forwarded_proto = "http"
         headers["X-Forwarded-Host"] = self.headers.get("Host", "")
         headers["X-Forwarded-Proto"] = forwarded_proto
+        headers["X-Forwarded-For"] = self.headers.get("X-Forwarded-For", self.client_address[0]) if trusted_proxy(self.client_address[0]) else self.client_address[0]
         request = urllib.request.Request(target, data=body, headers=headers, method=self.command)
         timeout = UPDATE_PROXY_TIMEOUT_SECONDS if self.path.startswith("/api/update/") else DEFAULT_PROXY_TIMEOUT_SECONDS
         try:

@@ -4,6 +4,11 @@ This project follows Semantic Versioning and uses tags prefixed with `v`.
 
 ## Unreleased
 
+- Added scoped integration API credentials and the API token management UI, with
+  granular action/resource grants, expiry, rotation, immediate revocation and audit.
+- Added HTTPS-only versioned health/control/configuration APIs, curated OpenAPI,
+  bounded quotas/idempotency, and trusted-proxy enforcement for forwarded schemes.
+
 - Separated preset Save/Open from explicit Apply, with revision conflicts,
   immutable selected/running snapshots, and independent apply/service permissions.
 - Pinned Start/Restart to a reviewed selection; automatic recovery retains the
