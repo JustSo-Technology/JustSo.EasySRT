@@ -5,6 +5,7 @@ import { Shield, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { ApiTokensPanel } from "./api-tokens-panel";
 import { cn } from "@/lib/utils";
 import type { User, UserRole } from "@/lib/api";
 
@@ -33,6 +34,7 @@ export function AdminModal({
   onCreateUser: (payload: { username: string; password: string; role: UserRole }) => Promise<void>;
   onUpdateUser: (userId: string, payload: { role?: UserRole; disabled?: boolean }) => Promise<void>;
 }) {
+  const [showTokens, setShowTokens] = useState(false);
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newRole, setNewRole] = useState<UserRole>("operator");
@@ -71,6 +73,8 @@ export function AdminModal({
     }
   }
 
+  if (showTokens) return <ApiTokensPanel users={users ?? []} currentUser={currentUser} onClose={() => setShowTokens(false)} />;
+
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[rgba(2,7,12,0.54)] px-4 py-4 backdrop-blur-[10px] sm:items-center sm:px-7 sm:py-6">
       <div className="absolute inset-0" onClick={onClose} />
@@ -86,6 +90,8 @@ export function AdminModal({
                 Close
               </Button>
             </div>
+
+            <Button className="mt-6" onClick={() => setShowTokens(true)}>API tokens</Button>
 
             <div className="mt-8 rounded-[28px] border border-white/10 bg-black/20 p-5">
               <div className="flex items-center gap-3">

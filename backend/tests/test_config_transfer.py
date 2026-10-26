@@ -234,7 +234,7 @@ def test_stale_modified_or_replayed_previews_rejected(client, legacy, mutation, 
     assert fingerprint() == before
 
 
-def test_conflicts_skip_rename_replace_and_active_preset_guard(client, legacy):
+def test_conflicts_skip_rename_replace_and_library_revision(client, legacy):
     decisions, token = reviewed(client, legacy)
     assert apply(client, legacy, decisions, token).status_code == 200
     p = preview(client, legacy).json()
@@ -250,9 +250,13 @@ def test_conflicts_skip_rename_replace_and_active_preset_guard(client, legacy):
     with Session(get_engine()) as s:
         target = s.exec(select(SavedSiteConfigRecord).where(SavedSiteConfigRecord.name == 'Example preset 1')).one()
         assert json.loads(target.site_payload)['profile']['srt_latency_ms'] == 250
-        s.add(SiteConfigState(active_saved_config_id=target.id)); s.commit()
+        target_id = target.id
+        s.add(SiteConfigState(active_saved_config_id=target_id)); s.commit()
     p = preview(client, legacy, decision).json()
-    assert not p['can_import'] and any('active preset' in e for e in p['errors'])
+    assert p['can_import']
+    assert apply(client, legacy, decision, p['preview_token']).status_code == 200
+    with Session(get_engine()) as s:
+        assert s.get(SavedSiteConfigRecord, target_id).revision == 3
 
 
 def test_duplicate_target_names_block_the_entire_plan(client, legacy):
@@ -307,13 +311,16 @@ def test_size_limits_invalid_json_and_sanitized_errors(client):
 def test_local_activation_waits_for_import_writer_lock_before_runtime_writes(client, legacy, monkeypatch):
     from sqlalchemy import event
     from sqlalchemy.engine import Engine
-    from app.api import config as config_api
+    from app.services import config_snapshots
+    from test_presets import save as save_preset, review, apply_body
+    preset = save_preset(client)
+    body = apply_body(review(client, preset))
     waiting, wrote_files = threading.Event(), threading.Event()
-    original = config_api.save_bundle
+    original = config_snapshots.stage
     def save(*args):
         wrote_files.set()
         return original(*args)
-    monkeypatch.setattr(config_api, 'save_bundle', save)
+    monkeypatch.setattr(config_snapshots, 'stage', save)
     decisions, token = reviewed(client, legacy)
     main_thread = threading.get_ident()
     def before_execute(conn, cursor, statement, params, context, executemany):
@@ -325,7 +332,7 @@ def test_local_activation_waits_for_import_writer_lock_before_runtime_writes(cli
     try:
         with Session(get_engine()) as holder, ThreadPoolExecutor(max_workers=1) as pool:
             holder.connection().exec_driver_sql('BEGIN IMMEDIATE')
-            future = pool.submit(client.put, '/api/config/site', json=site)
+            future = pool.submit(client.post, f"/api/config/saved/{preset['id']}/apply", json=body)
             try:
                 assert waiting.wait(3)
                 assert not wrote_files.wait(0.1)

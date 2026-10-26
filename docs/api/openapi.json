@@ -1,0 +1,2313 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "EasySRT Integration API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v1/": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Discovery",
+        "operationId": "discovery_api_v1__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/token": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Own Token",
+        "operationId": "own_token_api_v1_auth_token_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/scopes": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Scopes",
+        "operationId": "scopes_api_v1_scopes_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/scope-presets": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Presets Catalogue",
+        "operationId": "presets_catalogue_api_v1_scope_presets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/service/status": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Service Status",
+        "operationId": "service_status_api_v1_service_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "x-required-scope": "service:read",
+        "x-resource-kind": "path"
+      }
+    },
+    "/api/v1/paths/default/health": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Health",
+        "operationId": "health_api_v1_paths_default_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "x-required-scope": "health:read",
+        "x-resource-kind": "path"
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Health",
+        "operationId": "health_api_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "x-required-scope": "health:read",
+        "x-resource-kind": "path"
+      }
+    },
+    "/api/v1/paths": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Paths",
+        "operationId": "paths_api_v1_paths_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "x-required-scope": "health:read",
+        "x-resource-kind": "path"
+      }
+    },
+    "/api/v1/paths/default/events": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Health Events",
+        "operationId": "health_events_api_v1_paths_default_events_get",
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "health-events:read",
+        "x-resource-kind": "path"
+      }
+    },
+    "/api/v1/health/events": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Health Events",
+        "operationId": "health_events_api_v1_health_events_get",
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "health-events:read",
+        "x-resource-kind": "path"
+      }
+    },
+    "/api/v1/metrics": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Metrics",
+        "operationId": "metrics_api_v1_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "x-required-scope": "metrics:read",
+        "x-resource-kind": "path"
+      }
+    },
+    "/api/v1/service/start": {
+      "post": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Service Start",
+        "operationId": "service_start_api_v1_service_start_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommandBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "x-required-scope": "service:start",
+        "x-resource-kind": "path"
+      }
+    },
+    "/api/v1/service/stop": {
+      "post": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Service Stop",
+        "operationId": "service_stop_api_v1_service_stop_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommandBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "x-required-scope": "service:stop",
+        "x-resource-kind": "path"
+      }
+    },
+    "/api/v1/service/restart": {
+      "post": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Service Restart",
+        "operationId": "service_restart_api_v1_service_restart_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommandBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "x-required-scope": "service:restart",
+        "x-resource-kind": "path"
+      }
+    },
+    "/api/v1/system": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "System",
+        "operationId": "system_api_v1_system_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "x-required-scope": "system:read",
+        "x-resource-kind": "instance"
+      }
+    },
+    "/api/v1/diagnostics": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Diagnostics",
+        "operationId": "diagnostics_api_v1_diagnostics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "x-required-scope": "diagnostics:read",
+        "x-resource-kind": "path"
+      }
+    },
+    "/api/v1/diagnostics/run": {
+      "post": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Run Diagnostics",
+        "operationId": "run_diagnostics_api_v1_diagnostics_run_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "x-required-scope": "diagnostics:run",
+        "x-resource-kind": "path"
+      }
+    },
+    "/api/v1/logs": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Logs",
+        "operationId": "logs_api_v1_logs_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "x-required-scope": "logs:read",
+        "x-resource-kind": "path"
+      }
+    },
+    "/api/v1/config": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Read Config",
+        "operationId": "read_config_api_v1_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "x-required-scope": "config:read",
+        "x-resource-kind": "instance"
+      }
+    },
+    "/api/v1/config/app": {
+      "patch": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Update App",
+        "operationId": "update_app_api_v1_config_app_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "x-required-scope": "config-app:update",
+        "x-resource-kind": "instance"
+      }
+    },
+    "/api/v1/config/validate": {
+      "post": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Validate Site",
+        "operationId": "validate_site_api_v1_config_validate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteConfig"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "x-required-scope": "config:validate",
+        "x-resource-kind": "instance"
+      }
+    },
+    "/api/v1/presets": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "List Presets",
+        "operationId": "list_presets_api_v1_presets_get",
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "presets:read",
+        "x-resource-kind": "preset"
+      },
+      "post": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Create Preset",
+        "operationId": "create_preset_api_v1_presets_post",
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresetBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "presets:create",
+        "x-resource-kind": "preset"
+      }
+    },
+    "/api/v1/presets/{preset_id}": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Preset Detail",
+        "operationId": "preset_detail_api_v1_presets__preset_id__get",
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "preset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "presets:read",
+        "x-resource-kind": "preset"
+      },
+      "patch": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Update Preset",
+        "operationId": "update_preset_api_v1_presets__preset_id__patch",
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "preset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preset Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresetBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "presets:update",
+        "x-resource-kind": "preset"
+      },
+      "delete": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Delete Preset",
+        "operationId": "delete_preset_api_v1_presets__preset_id__delete",
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "preset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preset Id"
+            }
+          },
+          {
+            "name": "expected_revision",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Expected Revision"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "presets:delete",
+        "x-resource-kind": "preset"
+      }
+    },
+    "/api/v1/presets/{preset_id}/apply": {
+      "post": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Apply",
+        "operationId": "apply_api_v1_presets__preset_id__apply_post",
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "preset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preset Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyPresetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "presets:apply",
+        "x-resource-kind": "preset"
+      }
+    },
+    "/api/v1/inputs": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Inputs Listing",
+        "operationId": "inputs_listing_api_v1_inputs_get",
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "inputs:read",
+        "x-resource-kind": "input"
+      },
+      "post": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Inputs Create",
+        "operationId": "inputs_create_api_v1_inputs_post",
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "inputs:create",
+        "x-resource-kind": "input"
+      }
+    },
+    "/api/v1/inputs/{resource_id}": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Inputs Detail",
+        "operationId": "inputs_detail_api_v1_inputs__resource_id__get",
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "resource_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Resource Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "inputs:read",
+        "x-resource-kind": "input"
+      },
+      "patch": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Inputs Update",
+        "operationId": "inputs_update_api_v1_inputs__resource_id__patch",
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "resource_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Resource Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "inputs:update",
+        "x-resource-kind": "input"
+      },
+      "delete": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Inputs Delete",
+        "operationId": "inputs_delete_api_v1_inputs__resource_id__delete",
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "resource_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Resource Id"
+            }
+          },
+          {
+            "name": "expected_digest",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Expected Digest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "inputs:delete",
+        "x-resource-kind": "input"
+      }
+    },
+    "/api/v1/destinations": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Destinations Listing",
+        "operationId": "destinations_listing_api_v1_destinations_get",
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "destinations:read",
+        "x-resource-kind": "destination"
+      },
+      "post": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Destinations Create",
+        "operationId": "destinations_create_api_v1_destinations_post",
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "destinations:create",
+        "x-resource-kind": "destination"
+      }
+    },
+    "/api/v1/destinations/{resource_id}": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Destinations Detail",
+        "operationId": "destinations_detail_api_v1_destinations__resource_id__get",
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "resource_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Resource Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "destinations:read",
+        "x-resource-kind": "destination"
+      },
+      "patch": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Destinations Update",
+        "operationId": "destinations_update_api_v1_destinations__resource_id__patch",
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "resource_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Resource Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "destinations:update",
+        "x-resource-kind": "destination"
+      },
+      "delete": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Destinations Delete",
+        "operationId": "destinations_delete_api_v1_destinations__resource_id__delete",
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "resource_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Resource Id"
+            }
+          },
+          {
+            "name": "expected_digest",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Expected Digest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "destinations:delete",
+        "x-resource-kind": "destination"
+      }
+    },
+    "/api/v1/config/export": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Export Config",
+        "operationId": "export_config_api_v1_config_export_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "x-required-scope": "config:export",
+        "x-resource-kind": "instance"
+      }
+    },
+    "/api/v1/config/import/preview": {
+      "post": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Import Preview",
+        "operationId": "import_preview_api_v1_config_import_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "x-required-scope": "config-import:preview",
+        "x-resource-kind": "instance"
+      }
+    },
+    "/api/v1/config/import": {
+      "post": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Import Commit",
+        "operationId": "import_commit_api_v1_config_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "x-required-scope": "config:import",
+        "x-resource-kind": "instance"
+      }
+    },
+    "/api/v1/redundancy/status": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Redundancy",
+        "operationId": "redundancy_api_v1_redundancy_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "x-required-scope": "redundancy:read",
+        "x-resource-kind": "instance"
+      }
+    },
+    "/api/v1/redundancy/config-sync": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Config Sync",
+        "operationId": "config_sync_api_v1_redundancy_config_sync_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "x-required-scope": "config-sync:read",
+        "x-resource-kind": "instance"
+      }
+    },
+    "/api/v1/updates/status": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Updates",
+        "operationId": "updates_api_v1_updates_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "x-required-scope": "updates:read",
+        "x-resource-kind": "instance"
+      }
+    },
+    "/api/v1/updates/check": {
+      "post": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Check Updates",
+        "operationId": "check_updates_api_v1_updates_check_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "x-required-scope": "updates:check",
+        "x-resource-kind": "instance"
+      }
+    },
+    "/api/v1/audit-events": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Audit Events",
+        "operationId": "audit_events_api_v1_audit_events_get",
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "audit:read",
+        "x-resource-kind": "instance"
+      }
+    },
+    "/api/v1/openapi.json": {
+      "get": {
+        "tags": [
+          "Integration API"
+        ],
+        "summary": "Specification",
+        "operationId": "specification_api_v1_openapi_json_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "IntegrationToken": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AppConfig": {
+        "properties": {
+          "station_name": {
+            "type": "string",
+            "title": "Station Name",
+            "default": "JustSo Demo Station"
+          },
+          "support_contact": {
+            "type": "string",
+            "title": "Support Contact",
+            "default": "support@justso.dev"
+          }
+        },
+        "type": "object",
+        "title": "AppConfig"
+      },
+      "AppUpdate": {
+        "properties": {
+          "app": {
+            "$ref": "#/components/schemas/AppConfig"
+          },
+          "expected_digest": {
+            "type": "string",
+            "title": "Expected Digest"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "app",
+          "expected_digest"
+        ],
+        "title": "AppUpdate"
+      },
+      "ApplyPresetRequest": {
+        "properties": {
+          "expected_revision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision"
+          },
+          "expected_selection_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Selection Id"
+          },
+          "app_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Digest"
+          },
+          "runtime_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime Digest"
+          },
+          "runtime_version": {
+            "type": "integer",
+            "title": "Runtime Version",
+            "default": 1
+          },
+          "target": {
+            "type": "string",
+            "title": "Target",
+            "default": "default"
+          },
+          "request_id": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "request_id"
+        ],
+        "title": "ApplyPresetRequest"
+      },
+      "CommandBody": {
+        "properties": {
+          "expected_selection_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Selection Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CommandBody"
+      },
+      "Decision": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Key"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "add",
+              "skip",
+              "replace"
+            ],
+            "title": "Action"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "action"
+        ],
+        "title": "Decision"
+      },
+      "Destination": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "protocol": {
+            "type": "string",
+            "title": "Protocol",
+            "default": "srt"
+          },
+          "host": {
+            "type": "string",
+            "title": "Host"
+          },
+          "port": {
+            "type": "integer",
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Port",
+            "default": 16466
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "host"
+        ],
+        "title": "Destination"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ImportRequest": {
+        "properties": {
+          "document": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Document"
+          },
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/Decision"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "title": "Decisions"
+          },
+          "preview_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Token"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "document"
+        ],
+        "title": "ImportRequest"
+      },
+      "InputSource": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "url"
+        ],
+        "title": "InputSource"
+      },
+      "PresetBody": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "site": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site"
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PresetBody"
+      },
+      "SiteConfig": {
+        "properties": {
+          "input": {
+            "$ref": "#/components/schemas/InputSource"
+          },
+          "destination": {
+            "$ref": "#/components/schemas/Destination"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/StreamProfile"
+          }
+        },
+        "type": "object",
+        "required": [
+          "input",
+          "destination",
+          "profile"
+        ],
+        "title": "SiteConfig"
+      },
+      "StreamProfile": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "audio_bitrate_kbps": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Audio Bitrate Kbps",
+            "default": 256
+          },
+          "sample_rate_hz": {
+            "type": "integer",
+            "title": "Sample Rate Hz",
+            "default": 48000
+          },
+          "channels": {
+            "type": "integer",
+            "title": "Channels",
+            "default": 2
+          },
+          "srt_latency_ms": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Srt Latency Ms",
+            "default": 120
+          },
+          "mux_rate_kbps": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Mux Rate Kbps",
+            "default": 600
+          },
+          "pcr_period_ms": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Pcr Period Ms",
+            "default": 20
+          },
+          "enable_video": {
+            "type": "boolean",
+            "title": "Enable Video",
+            "default": false
+          },
+          "video_codec": {
+            "type": "string",
+            "title": "Video Codec",
+            "default": "mpeg2video"
+          },
+          "video_bitrate_kbps": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Video Bitrate Kbps",
+            "default": 1000
+          },
+          "video_resolution": {
+            "type": "string",
+            "title": "Video Resolution",
+            "default": "1280x720"
+          },
+          "video_frame_rate": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Video Frame Rate",
+            "default": 25
+          },
+          "video_source": {
+            "type": "string",
+            "title": "Video Source",
+            "default": "none"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "StreamProfile"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "IntegrationToken": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

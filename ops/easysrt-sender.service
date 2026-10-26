@@ -2,6 +2,8 @@
 Description=JustSo EasySRT Sender
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -9,13 +11,14 @@ User=easysrt
 Group=easysrt
 WorkingDirectory=/opt/justso-easysrt/backend
 EnvironmentFile=-/etc/justso-easysrt/easysrt.env
-EnvironmentFile=/opt/justso-easysrt/backend/data/sender.env
-ExecStart=/bin/bash -lc 'if [ -z "${FFMPEG_CMD:-}" ]; then echo "FFMPEG_CMD is not set" >&2; exit 1; fi; eval "exec ${FFMPEG_CMD}"'
-Restart=always
+ExecStart=/usr/bin/python3 -I /usr/local/lib/justso-easysrt/sender-supervisor.py --runtime /opt/justso-easysrt/backend/data/applied_sender.json --status /opt/justso-easysrt/backend/data/sender_status.json
+Restart=on-failure
 RestartSec=5
 KillSignal=SIGINT
-SuccessExitStatus=255
+KillMode=mixed
 TimeoutStopSec=20
+UMask=0077
+NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target

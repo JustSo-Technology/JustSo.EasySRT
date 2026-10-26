@@ -7,11 +7,45 @@
 1. Install on Ubuntu and open the printed management URL from your trusted network. Create the first owner account. There is no documented factory username/password; first-run setup creates the owner.
 2. Obtain an audio source URL and the receiver's protocol, hostname/IP, port and required media format. For SRT output the receiver must accept a caller connection. Confirm routing/firewall/NAT permissions and receiver readiness with its operator.
 3. Open **Config**. Enter the input, destination and stream profile described below. Name the configuration so another operator can identify the route.
-4. Click **Save Site Config** and confirm any intentional overwrite. Saving regenerates the active configuration/runtime files. **Load Saved Config** also applies a preset to runtime files; it is not merely a preview.
+4. Click **Save preset**. To edit an existing preset, first **Open preset** so its revision is checked on Save. Review it, click **Apply preset**, then confirm Apply. This selects that exact revision for the next Start/Restart without interrupting the current sender.
 5. Check diagnostics/preflight. Resolve failures before starting. **Control → Start** launches the sender; **Stop** stops it; **Restart** interrupts and relaunches it. Start/restart is blocked when preflight fails.
 6. Confirm audio and receiver lock at the destination, not just a running sender process. Check the intended source, channels, codec, levels and stability.
 
-Saving/loading configuration does not by itself restart an already-running FFmpeg process. Schedule a deliberate restart to apply changed runtime settings to a live sender. Coordinate this interruption with the receiving operator. This is distinct from importing presets, which does not activate them at all.
+Saving, opening, renaming, deleting and importing presets only change the library/editor. **Apply** copies a reviewed revision into an immutable selected configuration. The dashboard separately shows the selected configuration and the configuration actually running. When they differ, selected settings await a deliberate **Start/Restart**. **Restart** interrupts the stream and shows a separate review; coordinate this with the receiver. Automatic recovery keeps the pinned running configuration, even after another Apply.
+
+## Automatic path recovery
+
+The sender supervisor checks source-audio samples and local output media separately. **Healthy** means these local counters are advancing; confirm receiver lock and audio separately. A live process, generated black video, or SRT keepalives alone cannot establish source-audio health. Silent audio with advancing samples is valid media.
+
+The Control tab shows connecting, healthy, degraded, retrying, stopped, or unknown, with the current reason, progress age, retry timing and recent recovery history. Unknown/stale evidence is never shown as healthy. Stop cancels retries, including during startup or a prolonged outage. A successful finite file completes without replaying automatically.
+
+Recovery restarts only this instance's FFmpeg child. It retains the **applied** source, destination, encoding and transport settings even when someone has since saved another configuration. The dashboard shows the applied route and indicates a selected snapshot waiting for a deliberate Restart. Saving alone never creates pending application. Recovery continues with the browser closed and through backend/helper restarts. Journal events record failure, retry and recovery timestamps without source credentials.
+
+When both media counters stop, the UI reports an unconfirmed media stall: output backpressure can also stop source processing, so the cause cannot always be assigned to one side. Local UDP output provides no receiver acknowledgement. SRT transport acceptance also does not prove receiver playback.
+
+Recovery deadlines are host settings in `/etc/justso-easysrt/easysrt.env`. These defaults work without per-preset changes:
+
+| Environment variable | Default | Valid range (seconds) |
+| --- | --- | --- |
+| `EASYSRT_RECOVERY__STARTUP_SECONDS` | 30 | 5–300 |
+| `EASYSRT_RECOVERY__INPUT_STALL_SECONDS` | 15 | 3–300 |
+| `EASYSRT_RECOVERY__OUTPUT_STALL_SECONDS` | 15 | 3–300 |
+| `EASYSRT_RECOVERY__IO_TIMEOUT_SECONDS` | 10 | 1–120 |
+| `EASYSRT_RECOVERY__RETRY_INITIAL_SECONDS` | 2 | 1–30 |
+| `EASYSRT_RECOVERY__RETRY_MAX_SECONDS` | 30 | 1–300 |
+| `EASYSRT_RECOVERY__STABLE_SECONDS` | 30 | 5–300 |
+
+The initial retry delay must not exceed the maximum, and I/O timeout must not exceed startup timeout. SRT latency must be shorter than startup, output-stall and I/O deadlines. Set deadlines above the source cadence and intended buffering. FFmpeg's buffered media can continue progressing briefly after a network failure; stall deadlines measure time since the last observed media progress.
+
+Retries use exponential backoff with jitter between 80% and 100% of the selected delay, never exceeding the maximum. Backoff resets after sustained media progress. A stuck child receives escalating termination signals before a replacement can start. If the OS cannot reap it, the supervisor reports cleanup failure and waits without launching duplicates.
+
+After editing host policy, restart the backend, then Open a preset, review the resulting runtime and Apply it. Deliberately Restart the sender when ready to use that selection. Preset import/export remains compatible because host recovery policy is not part of portable presets. Read [the validation report](validation/issue-14-recovery.md) for the tested transports and evidence limits.
+
+### Upgrading an existing live sender
+
+An update installs the supervisor and service unit but leaves the live sender alone. Until its next explicit Start/Restart, a legacy sender reports media health unavailable. Start/Restart through the WebUI pins `applied_sender.json` and activates recovery. Direct `systemctl stop` is respected; use Apply followed by WebUI Start/Restart to launch a newly selected revision. A direct systemd crash restart reuses the applied snapshot.
+
+Systemd separately restarts a crashed supervisor, with a five-crash limit in sixty seconds. If the supervisor itself keeps crashing, inspect the sender journal and correct the runtime before using Start again. This crash limit does not cap the supervisor's ongoing media reconnect attempts.
 
 ## Input
 
@@ -51,9 +85,9 @@ These are model defaults, not a recommendation for every network or receiver. In
 
 ## Presets and importing older installations
 
-Named configurations hold the input, destination and profile together. Saved inputs/destinations are reusable entries. Review the selected route after loading a preset, and restart deliberately if you intend to change a running sender.
+Presets hold input, destination and profile together. Saved inputs/destinations are reusable entries. Editing or deleting a preset leaves any selected/running copy unchanged. A newer saved revision needs a separate Apply. Conflicting edits are rejected; keep your draft and open/review the current preset before retrying. Unsaved editor changes cannot be applied.
 
-Owners/engineers can use **Config → Import and export configurations**. Import validates and saves entries without activating a preset, writing runtime files or starting the sender. Review Add/Skip/Replace decisions and then deliberately load the chosen configuration. Older SRT presets require an explicit reviewed latency because earlier versions confused milliseconds and microseconds. Follow the [complete transfer guide](configuration-transfer.md).
+Owners/engineers can use **Config → Import and export configurations**. Import validates and saves entries without activating a preset, writing runtime files or starting the sender. Review Add/Skip/Replace decisions and then open, review and Apply the chosen configuration. Older SRT presets require an explicit reviewed latency because earlier versions confused milliseconds and microseconds. Follow the [complete transfer guide](configuration-transfer.md).
 
 An exported preset file is not a complete backup of users, sessions, environment secrets, database state or system services. Back up installations separately before maintenance.
 
@@ -61,7 +95,7 @@ An exported preset file is not a complete backup of users, sessions, environment
 
 Use the WebUI for stream configuration. Host/network settings live in `/etc/justso-easysrt/easysrt.env`: public origin, bind addresses, ports, trusted hosts, secure cookies and update settings. Keep this file root-owned with restricted service-account access. After an intentional host-setting change, restart the relevant control-plane services in a maintenance window; changing a file alone does not reconfigure running processes. Follow [deployment security](deployment-security.md), especially for HTTPS and the separate updater origin.
 
-The app checkout is `/opt/justso-easysrt`; persisted data/runtime files are under its `backend/data/`. Privileged helper/updater scripts are under `/usr/local/lib/justso-easysrt`, and their update-source policy is `/etc/justso-easysrt/update-policy.json`. Do not edit generated `sender.env` or `runtime_config.json` as the normal configuration interface; subsequent saves regenerate them.
+The app checkout is `/opt/justso-easysrt`; persisted data/runtime files are under its `backend/data/`. Privileged helper/updater scripts are under `/usr/local/lib/justso-easysrt`, and their update-source policy is `/etc/justso-easysrt/update-policy.json`. Selected configuration files live in immutable `generations/<snapshot-id>/` directories, with `selected` pointing to the committed generation. `applied_sender.json` pins the runtime used by the sender and its automatic retries. Top-level legacy files are preserved during migration. Use Save → review → Apply → Start/Restart instead of editing generated files. Application metadata edits become effective for streaming only after a reviewed Apply.
 
 Partner pairing/authority and takeover are separate from configuring one sender. Validate both nodes and receiver behavior in an isolated rehearsal before relying on redundancy; this first-stream guide is not a failover acceptance procedure.
 
@@ -73,8 +107,8 @@ Partner pairing/authority and takeover are separate from configuring one sender.
 | Login fails after proxy changes | Public origin, trusted hosts, HTTPS/cookie settings and proxy headers |
 | Start unavailable or fails | Preflight output, input reachability from the VM, FFmpeg availability and runtime generation |
 | Sender running but no audio received | Receiver mode/port, routing/firewall, media codec/container, source audio and receiver logs |
-| Old route still on air | Configuration may be saved but running FFmpeg needs a deliberate restart |
-| Imported presets seem inactive | Expected: explicitly load a reviewed imported preset before starting/restarting |
+| Old route still on air | Save prepares a preset; Apply selects it; explicit Restart changes the running configuration |
+| Imported presets seem inactive | Open, review and Apply the imported preset before Start/Restart |
 | Update refused | Owner access, GitHub connectivity, root-managed approved ref, separate updater origin and service health |
 
 On the Ubuntu VM, collect service evidence without changing state:
@@ -87,3 +121,9 @@ ffmpeg -protocols
 ```
 
 Check for SRT support in FFmpeg's protocol listing. Redact source credentials, tokens and private endpoints before sharing evidence. For assistance contact EasySRT@JustSo.tech; report vulnerabilities through [SECURITY.md](../SECURITY.md).
+
+## Permissions and upgrade behavior
+
+Owners and engineers can create/edit/delete and Apply presets. Operators can open presets and control an already selected sender; they cannot change the selected route. Apply and Start/Restart have separate backend permissions. Reload any browser left open across this upgrade; the old Load and direct site-write API routes return 410. See the [preset API/migration guide](preset-api.md).
+
+The first upgrade adds local revisions and captures the existing disk selection once. It does not infer that disk files describe an already-running legacy process. Its run identity stays unknown until the next explicit Start/Restart. Existing launch artifacts are preserved, and new Apply operations never replace them. The updater does not restart the live sender to complete migration. The next explicit Start/Restart establishes the verifiable run pin and uses the reviewed selected generation.

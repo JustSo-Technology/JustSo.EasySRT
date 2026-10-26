@@ -10,7 +10,8 @@ import { ConfigTransfer } from "@/features/config/config-transfer";
 import { Dashboard } from "@/features/dashboard/dashboard";
 import { DiagnosticsPanel } from "@/features/diagnostics/diagnostics-panel";
 import { UpdateModal } from "@/features/update/update-modal";
-import { api } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { api, type SavedSiteConfigSummary, type SavedSiteConfigDetail, type ConfigBundle } from "@/lib/api";
 
 function hasUpdateAvailable(installedCommit: string | null | undefined, latestCommit: string | null | undefined, flag?: boolean | null) {
   return Boolean(flag || (installedCommit && latestCommit && installedCommit !== latestCommit));
@@ -68,6 +69,8 @@ export default function App() {
     queryKey: ["service-status"],
     queryFn: api.getServiceStatus,
     enabled: isAuthenticated,
+    refetchInterval: 2000,
+    retry: 1,
   });
 
   const diagnosticsQuery = useQuery({
@@ -147,7 +150,8 @@ export default function App() {
   });
 
   const serviceMutation = useMutation({
-    mutationFn: api.runServiceAction,
+    mutationFn: ({ action, expectedSelectionId }: { action: "start" | "stop" | "restart"; expectedSelectionId?: string }) =>
+      api.runServiceAction(action, expectedSelectionId),
     onMutate: () => {
       setServiceActionError(null);
     },
@@ -164,39 +168,30 @@ export default function App() {
   });
 
   const saveConfigMutation = useMutation({
-    mutationFn: ({ name, site, overwrite }: { name: string; site: Parameters<typeof api.saveNamedSiteConfig>[1]; overwrite?: boolean }) =>
-      api.saveNamedSiteConfig(name, site, overwrite),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["config"] });
-      await queryClient.invalidateQueries({ queryKey: ["diagnostics"] });
-      await queryClient.invalidateQueries({ queryKey: ["service-status"] });
-      await queryClient.invalidateQueries({ queryKey: ["saved-site-configs"] });
+    mutationFn: async ({ name, site, base }: { name: string; site: ConfigBundle["site"]; base?: SavedSiteConfigSummary }) => {
+      const saved = await api.saveNamedSiteConfig(name, site, base);
+      return api.openSavedSiteConfig(saved.saved_config.id, saved.saved_config.revision);
     },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["saved-site-configs"] }),
   });
 
-  const loadSavedConfigMutation = useMutation({
-    mutationFn: api.loadSavedSiteConfig,
+  const applyConfigMutation = useMutation({
+    mutationFn: ({ review, requestId }: { review: SavedSiteConfigDetail; requestId: string }) => api.applySavedSiteConfig(review, requestId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["config"] });
-      await queryClient.invalidateQueries({ queryKey: ["diagnostics"] });
       await queryClient.invalidateQueries({ queryKey: ["service-status"] });
-      await queryClient.invalidateQueries({ queryKey: ["saved-site-configs"] });
+      await queryClient.invalidateQueries({ queryKey: ["diagnostics"] });
     },
   });
 
   const renameSavedConfigMutation = useMutation({
-    mutationFn: ({ savedConfigId, name }: { savedConfigId: string; name: string }) => api.renameSavedSiteConfig(savedConfigId, name),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["saved-site-configs"] });
-    },
+    mutationFn: ({ preset, name }: { preset: SavedSiteConfigSummary; name: string }) => api.renameSavedSiteConfig(preset, name),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["saved-site-configs"] }),
   });
 
   const deleteSavedConfigMutation = useMutation({
     mutationFn: api.deleteSavedSiteConfig,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["saved-site-configs"] });
-      await queryClient.invalidateQueries({ queryKey: ["config"] });
-    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["saved-site-configs"] }),
   });
 
   const saveInputMutation = useMutation({
@@ -349,18 +344,29 @@ export default function App() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
       >
+        {activeTab === "control" && configQuery.isError ? (
+          <section className="space-y-4 rounded-3xl border border-amber-300/20 p-6">
+            <p>Selected configuration is unavailable. Stop remains available while the sender is active.</p>
+            <Button disabled={serviceMutation.isPending || !statusQuery.data?.allowed_actions.includes("stop")} onClick={() => {
+              void serviceMutation.mutateAsync({ action: "stop" }).catch(() => undefined);
+            }}>Stop</Button>
+            {serviceActionError ? <p>{serviceActionError}</p> : null}
+          </section>
+        ) : null}
         {activeTab === "control" && configQuery.data ? (
           <Dashboard
             config={configQuery.data}
-            activeSavedConfig={savedConfigsQuery.data?.find((savedConfig) => savedConfig.is_active) ?? null}
             status={statusQuery.data}
+            statusUnavailable={statusQuery.isError}
+            statusUpdatedAt={statusQuery.dataUpdatedAt}
             redundancy={redundancyQuery.data}
-            onAction={(action) => serviceMutation.mutateAsync(action).then(() => undefined)}
+            onAction={(action, expectedSelectionId) => serviceMutation.mutateAsync({ action, expectedSelectionId }).then(() => undefined)}
             actionError={serviceActionError}
             isActionPending={serviceMutation.isPending}
           />
-        ) : activeTab === "config" && configQuery.data ? (
-          <div className="space-y-6">
+        ) : null}
+        {configQuery.data ? (
+          <div hidden={activeTab !== "config"} className="space-y-6">
           {meQuery.data.user.role !== "operator" && <ConfigTransfer onImported={async () => {
             await Promise.all([
               queryClient.invalidateQueries({ queryKey: ["saved-site-configs"] }),
@@ -376,21 +382,23 @@ export default function App() {
             isLoadingSavedConfigs={savedConfigsQuery.isLoading}
             isMutatingSavedConfigs={
               saveConfigMutation.isPending ||
-              loadSavedConfigMutation.isPending ||
+              applyConfigMutation.isPending ||
               renameSavedConfigMutation.isPending ||
               deleteSavedConfigMutation.isPending ||
               saveInputMutation.isPending ||
               saveDestinationMutation.isPending
             }
-            onSave={(name, site, overwrite) => saveConfigMutation.mutateAsync({ name, site, overwrite }).then(() => undefined)}
-            onLoadSaved={(savedConfigId) => loadSavedConfigMutation.mutateAsync(savedConfigId)}
-            onRenameSaved={(savedConfigId, name) => renameSavedConfigMutation.mutateAsync({ savedConfigId, name }).then(() => undefined)}
-            onDeleteSaved={(savedConfigId) => deleteSavedConfigMutation.mutateAsync(savedConfigId).then(() => undefined)}
+            onSave={(name, site, base) => saveConfigMutation.mutateAsync({ name, site, base })}
+            onLoadSaved={api.openSavedSiteConfig}
+            onApply={(review, requestId) => applyConfigMutation.mutateAsync({ review, requestId })}
+            onRenameSaved={(preset, name) => renameSavedConfigMutation.mutateAsync({ preset, name })}
+            onDeleteSaved={(preset) => deleteSavedConfigMutation.mutateAsync(preset).then(() => undefined)}
             onCreateSavedInput={(input) => saveInputMutation.mutateAsync(input)}
             onCreateSavedDestination={(destination) => saveDestinationMutation.mutateAsync(destination)}
           />
           </div>
-        ) : activeTab === "diagnostics" ? (
+        ) : null}
+        {activeTab === "diagnostics" ? (
           <DiagnosticsPanel
             diagnostics={diagnosticsQuery.data}
             logs={logsQuery.data}

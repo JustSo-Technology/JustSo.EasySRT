@@ -1,0 +1,25 @@
+{
+  "passed": true,
+  "cases": [
+    {
+      "case": "stop_during_retry_with_failed_preflight",
+      "passed": true
+    },
+    {
+      "case": "supervisor_crash_cgroup_cleanup_and_applied_runtime",
+      "passed": true
+    },
+    {
+      "case": "helper_restart_preserves_live_sender",
+      "passed": true
+    },
+    {
+      "case": "direct_systemctl_stop_stays_stopped",
+      "passed": true
+    },
+    {
+      "case": "stop_during_startup",
+      "passed": true
+    }
+  ]
+}

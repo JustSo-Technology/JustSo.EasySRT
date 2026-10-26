@@ -14,6 +14,8 @@ from app.core.settings import settings
 from app.schemas.config import ConfigBundle, RuntimeConfig
 from app.schemas.system import DiagnosticCheck
 from app.services.config_service import build_runtime_config, load_bundle, load_persisted_runtime_config
+from app.services.host_control import HostControlError, request_helper
+from app.services.sender_health import read_sender_health
 
 
 def _make_check(
@@ -126,7 +128,7 @@ def check_runtime_config_health(bundle: ConfigBundle | None = None) -> Diagnosti
     if persisted_runtime is None:
         return _check_error("runtime-config", "runtime", "runtime_config.json is missing")
     bundle = bundle or load_bundle()
-    expected = build_runtime_config(bundle.app, bundle.site)
+    expected = build_runtime_config(bundle.app, bundle.site).model_copy(update={"snapshot_id": bundle.runtime.snapshot_id})
     if persisted_runtime != expected:
         return _check_error("runtime-config", "runtime", "runtime_config.json does not match derived runtime")
     return _make_check(
@@ -141,7 +143,8 @@ def check_runtime_config_health(bundle: ConfigBundle | None = None) -> Diagnosti
 
 def check_sender_env_health(expected_runtime: RuntimeConfig | None = None) -> DiagnosticCheck:
     expected_runtime = expected_runtime or load_bundle().runtime
-    env_path = settings.sender_env_path
+    from app.services.config_snapshots import generation_path
+    env_path = generation_path(expected_runtime.snapshot_id) / "sender.env" if expected_runtime.snapshot_id else settings.sender_env_path
     if not env_path.exists():
         return _check_error("sender-env", "runtime", "sender.env is missing")
     env_text = env_path.read_text()
@@ -341,7 +344,7 @@ def check_destination_health(bundle: ConfigBundle | None = None) -> DiagnosticCh
     return _make_check(
         name="destination-health",
         ok=True,
-        detail=f"{protocol}://{host}:{port} resolved and accepted datagram precheck",
+        detail=f"{protocol}://{host}:{port} resolved; local datagram precheck only, not receiver receipt",
         severity="info",
         category="output",
         blocking=False,
@@ -376,4 +379,15 @@ def collect_diagnostics_checks() -> list[DiagnosticCheck]:
                 check_destination_health(bundle),
             ]
         )
+    try:
+        result = request_helper("sender_status", actor=None)
+        media = read_sender_health(result.get("service_state", "unknown"), result)
+    except HostControlError:
+        media = None
+    checks.append(_make_check(
+        name="runtime-media-progress", ok=media is not None and media.state in {"healthy", "stopped"},
+        detail=media.detail if media else "Media evidence unavailable; process activity does not establish media health.",
+        severity="info" if media and media.state in {"healthy", "stopped"} else "warning",
+        category="runtime", blocking=False,
+    ))
     return checks

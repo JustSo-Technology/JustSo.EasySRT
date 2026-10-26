@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import fcntl
 import logging
 import os
 import pwd
@@ -13,6 +14,7 @@ import struct
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -69,8 +71,11 @@ def _validate_peer(connection: socket.socket) -> None:
         raise HelperRequestError("forbidden", "Client is not permitted to use the local control helper")
 
 
-def _run_command(command: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(command, capture_output=True, text=True, check=False)
+def _run_command(command: list[str], *, timeout: float = 5, pass_fds: tuple[int, ...] = ()) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(command, capture_output=True, text=True, check=False, timeout=timeout, cwd="/", pass_fds=pass_fds)
+    except subprocess.TimeoutExpired as exc:
+        raise HelperRequestError("command_timeout", "Host control command timed out; refresh service status before retrying") from exc
 
 
 def _tail_text(stdout: str, stderr: str) -> str | None:
@@ -83,16 +88,20 @@ def _tail_text(stdout: str, stderr: str) -> str | None:
 def _actor_label(actor: dict[str, Any]) -> str:
     username = actor.get("username") or "unknown"
     role = actor.get("role") or "unknown"
-    return f"{username} ({role})"
+    return f"{username} ({role}) api_token={str(actor.get('api_token_id') or 'session')[:36]}"
 
 
 def _sender_status() -> dict[str, Any]:
-    result = _run_command(["/usr/bin/systemctl", "is-active", SENDER_SERVICE])
+    result = _run_command(["/usr/bin/systemctl", "show", SENDER_SERVICE,
+                           "--property=ActiveState", "--property=MainPID", "--property=InvocationID"])
     stdout = result.stdout.strip()
     stderr = result.stderr.strip()
-    state = stdout or ("unavailable" if stderr else "unknown")
+    properties = dict(line.split("=", 1) for line in stdout.splitlines() if "=" in line)
+    state = properties.get("ActiveState") or ("unavailable" if stderr else "unknown")
     return {
         "service_state": state,
+        "main_pid": int(properties.get("MainPID") or 0),
+        "invocation_id": properties.get("InvocationID") or "",
         "stdout": stdout,
         "stderr": stderr,
         "exit_code": result.returncode,
@@ -111,7 +120,62 @@ def _sender_logs(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _service_action(systemctl_action: str) -> dict[str, Any]:
+def _pin_sender_runtime(control_fd: int, expected_snapshot_id: str, *, validate_only: bool = False) -> None:
+    # Read and publish application-owned files AS the service user, never root.
+    # The fixed program copies data; no manifest content is executed by root.
+    program = """
+import fcntl, json, os, pathlib, sys, tempfile
+os.umask(0o077)
+source, target = map(pathlib.Path, sys.argv[1:3])
+# Keep the SAME open-file-description lock through runuser, even if the
+# helper is restarted while this child is publishing the applied manifest.
+fcntl.flock(int(sys.argv[3]), fcntl.LOCK_EX | fcntl.LOCK_NB)
+raw = source.read_bytes()
+if len(raw) > 65536: raise ValueError('Runtime too large')
+data = json.loads(raw)
+if data.get('schema_version') != 1 or not data.get('ffmpeg_args'): raise ValueError('Apply configuration before starting')
+if data.get('snapshot_id') != sys.argv[4]: raise ValueError('Selected configuration changed; review again')
+if sys.argv[5] == 'validate': sys.exit(0)
+with tempfile.NamedTemporaryFile('wb', dir=target.parent, delete=False) as handle:
+    handle.write(raw)
+    handle.flush()
+    os.fsync(handle.fileno())
+    temporary = pathlib.Path(handle.name)
+try:
+    temporary.replace(target)
+    fd = os.open(target.parent, os.O_RDONLY)
+    try: os.fsync(fd)
+    finally: os.close(fd)
+finally:
+    temporary.unlink(missing_ok=True)
+"""
+    data = APP_ROOT / "backend" / "data"
+    result = _run_command(["/usr/sbin/runuser", "-u", APP_USER, "--", "/usr/bin/python3", "-I", "-c", program,
+                           str(data / "selected/runtime_config.json"), str(data / "applied_sender.json"), str(control_fd), expected_snapshot_id, "validate" if validate_only else "publish"],
+                          pass_fds=(control_fd,))
+    if result.returncode:
+        raise HelperRequestError("runtime_unavailable", "Unable to apply sender runtime; review and Apply configuration before starting")
+
+
+def _service_action(systemctl_action: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    expected = (payload or {}).get("expected_snapshot_id")
+    if systemctl_action in {"start", "restart"} and (not isinstance(expected, str) or not re.fullmatch(r"[a-f0-9-]{36}", expected)):
+        raise HelperRequestError("review_required", "Selected snapshot identity is required before Start/Restart")
+    lock_path = SOCKET_PATH.parent / "sender-control.lock"
+    with lock_path.open("a") as lock:
+        deadline = time.monotonic() + 5
+        while True:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise HelperRequestError("control_busy", "Another sender action is still completing; refresh status")
+                time.sleep(.05)
+        return _locked_service_action(systemctl_action, lock.fileno(), expected)
+
+
+def _locked_service_action(systemctl_action: str, control_fd: int, expected_snapshot_id: str | None) -> dict[str, Any]:
     if systemctl_action in {"start", "restart"}:
         reload_result = _run_command(["/usr/bin/systemctl", "daemon-reload"])
         if reload_result.returncode != 0:
@@ -126,8 +190,20 @@ def _service_action(systemctl_action: str) -> dict[str, Any]:
                 },
             )
 
-    command = ["/usr/bin/systemctl", systemctl_action, SENDER_SERVICE]
-    result = _run_command(command)
+    current = _sender_status()["service_state"]
+    if systemctl_action == "start" and current not in {"inactive", "failed"}:
+        raise HelperRequestError("invalid_transition", "Sender is already starting or running; refresh service status")
+    if systemctl_action in {"start", "restart"}:
+        _pin_sender_runtime(control_fd, expected_snapshot_id, validate_only=True)
+    if systemctl_action == "restart":
+        stopped = _run_command(["/usr/bin/systemctl", "stop", SENDER_SERVICE], timeout=25)
+        if stopped.returncode:
+            raise HelperRequestError("stop_failed", "Old sender could not be stopped; no replacement was started")
+    if systemctl_action in {"start", "restart"}:
+        _pin_sender_runtime(control_fd, expected_snapshot_id)
+        _run_command(["/usr/bin/systemctl", "reset-failed", SENDER_SERVICE])
+    command = ["/usr/bin/systemctl", "start" if systemctl_action == "restart" else systemctl_action, SENDER_SERVICE]
+    result = _run_command(command, timeout=25)
     if result.returncode != 0:
         raise HelperRequestError(
             "service_action_failed",
@@ -242,11 +318,11 @@ def _dispatch(action: str, payload: dict[str, Any]) -> dict[str, Any]:
     if action == "sender_logs":
         return _sender_logs(payload)
     if action == "sender_start":
-        return _service_action("start")
+        return _service_action("start", payload)
     if action == "sender_stop":
-        return _service_action("stop")
+        return _service_action("stop", payload)
     if action == "sender_restart":
-        return _service_action("restart")
+        return _service_action("restart", payload)
     if action == "update_control_plane":
         return _update_control_plane(payload)
     raise HelperRequestError("unsupported_action", f"Unsupported helper action: {action}")

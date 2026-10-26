@@ -34,21 +34,38 @@ export interface ConfigBundle {
       video_source: "none" | "black_test_frames";
     };
   };
+  selected?: SelectionSummary | null;
+  capabilities?: string[];
   runtime: { ffmpeg_command: string; service_name: string; generated_from_station: string };
+}
+
+export interface SelectionSummary {
+  id: string;
+  source_preset_id: string | null;
+  source_revision: number | null;
+  source_name: string;
+  target: string;
+  created_at: string;
 }
 
 export interface SavedSiteConfigSummary {
   id: string;
   name: string;
+  revision: number;
   created_at: string;
   updated_at: string;
-  last_loaded_at: string | null;
-  is_active: boolean;
 }
 
 export interface SavedSiteConfigResponse {
   saved_config: SavedSiteConfigSummary;
+}
+
+export interface SavedSiteConfigDetail extends SavedSiteConfigResponse {
   bundle: ConfigBundle;
+  app_digest: string;
+  runtime_digest: string;
+  runtime_version: number;
+  expected_selection_id: string | null;
 }
 
 export interface SavedInputEntry {
@@ -80,6 +97,29 @@ export interface ServiceStatus {
   last_command: string | null;
   last_exit_code: number | null;
   stderr_tail: string | null;
+  media?: SenderHealth;
+  selected?: SelectionSummary | null;
+  running_config?: ConfigBundle | null;
+  pending_configuration?: boolean | null;
+}
+
+export interface SenderHealth {
+  state: "stopped" | "connecting" | "healthy" | "degraded" | "retrying" | "unknown";
+  reason: string;
+  detail: string;
+  summary: Record<string, string>;
+  input: { value: number; age_seconds: number | null; last_progress_at: string | null };
+  output: { value: number; age_seconds: number | null; last_progress_at: string | null };
+  attempt: number;
+  retry_count: number;
+  next_retry_at: string | null;
+  last_failure_at: string | null;
+  last_recovery_at: string | null;
+  heartbeat_at: string | null;
+  pending_config: boolean;
+  remote_receipt: "unverified";
+  policy: Record<string, number>;
+  events: Array<{ at: string; state: string; reason: string; attempt: number }>;
 }
 
 export interface RedundancyNodeSummary {
@@ -288,30 +328,28 @@ export const api = {
     }),
   logout: () => request<AuthStatus>("/api/auth/logout", { method: "POST" }),
   getConfig: () => request<ConfigBundle>("/api/config"),
-  updateSiteConfig: (site: ConfigBundle["site"]) =>
-    request<ConfigBundle>("/api/config/site", {
-      method: "PUT",
-      body: JSON.stringify(site),
-    }),
   listSavedSiteConfigs: () => request<SavedSiteConfigSummary[]>("/api/config/saved"),
-  saveNamedSiteConfig: (name: string, site: ConfigBundle["site"], overwrite = false) =>
-    request<SavedSiteConfigResponse>("/api/config/saved", {
-      method: "POST",
-      body: JSON.stringify({ name, site, overwrite }),
+  saveNamedSiteConfig: (name: string, site: ConfigBundle["site"], base?: SavedSiteConfigSummary) =>
+    base && base.name === name
+      ? request<SavedSiteConfigResponse>(`/api/config/saved/${base.id}`, {
+          method: "PUT", body: JSON.stringify({ site, expected_revision: base.revision }),
+        })
+      : request<SavedSiteConfigResponse>("/api/config/saved", { method: "POST", body: JSON.stringify({ name, site }) }),
+  openSavedSiteConfig: (id: string, expectedRevision?: number) => request<SavedSiteConfigDetail>(`/api/config/saved/${id}${expectedRevision === undefined ? "" : `?expected_revision=${expectedRevision}`}`),
+  applySavedSiteConfig: (review: SavedSiteConfigDetail, requestId: string) =>
+    request<ConfigBundle>(`/api/config/saved/${review.saved_config.id}/apply`, {
+      method: "POST", body: JSON.stringify({
+        expected_revision: review.saved_config.revision, expected_selection_id: review.expected_selection_id,
+        app_digest: review.app_digest, runtime_digest: review.runtime_digest,
+        runtime_version: review.runtime_version, target: "default", request_id: requestId,
+      }),
     }),
-  loadSavedSiteConfig: (savedConfigId: string) =>
-    request<ConfigBundle>(`/api/config/saved/${savedConfigId}/load`, {
-      method: "POST",
+  renameSavedSiteConfig: (preset: SavedSiteConfigSummary, name: string) =>
+    request<SavedSiteConfigSummary>(`/api/config/saved/${preset.id}`, {
+      method: "PATCH", body: JSON.stringify({ name, expected_revision: preset.revision }),
     }),
-  renameSavedSiteConfig: (savedConfigId: string, name: string) =>
-    request<SavedSiteConfigSummary>(`/api/config/saved/${savedConfigId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ name }),
-    }),
-  deleteSavedSiteConfig: (savedConfigId: string) =>
-    request<{ ok: true }>(`/api/config/saved/${savedConfigId}`, {
-      method: "DELETE",
-    }),
+  deleteSavedSiteConfig: (preset: SavedSiteConfigSummary) =>
+    request<{ ok: true }>(`/api/config/saved/${preset.id}?expected_revision=${preset.revision}`, { method: "DELETE" }),
   listSavedInputs: () => request<SavedInputEntry[]>("/api/config/saved-inputs"),
   saveInput: (input: ConfigBundle["site"]["input"]) =>
     request<SavedInputEntry>("/api/config/saved-inputs", {
@@ -325,9 +363,10 @@ export const api = {
       body: JSON.stringify({ destination }),
     }),
   getServiceStatus: () => request<ServiceStatus>("/api/service/status"),
-  runServiceAction: (action: "start" | "stop" | "restart") =>
+  runServiceAction: (action: "start" | "stop" | "restart", expectedSelectionId?: string) =>
     request<ServiceStatus>(`/api/service/${action}`, {
       method: "POST",
+      body: JSON.stringify({ expected_selection_id: expectedSelectionId }),
     }),
   getLogs: () => request<{ service_name: string; lines: string[] }>("/api/logs"),
   getDiagnostics: () => request<{ checks: DiagnosticCheck[] }>("/api/diagnostics"),
@@ -357,4 +396,32 @@ export const api = {
       method: "POST",
     }),
   getUpdateJob: () => request<UpdateJobStatus>("/api/update/job"),
+};
+
+export interface ScopeGrant { scope: string; kind: string; resource_id: string; target: string | null }
+export interface TokenCatalogue {
+  instance_id: string;
+  scopes: Array<{ id: string; group: string; kind: string; minimum_role: UserRole; description?: string }>;
+  presets: Array<{ id: string; version: number; grants: ScopeGrant[] }>;
+  resources: Record<string, Array<{ id: string; name: string }>>;
+  endpoints: Record<string, string[]>;
+}
+export interface IntegrationToken {
+  id: string; name: string; integration: string; owner_id: string; creator_id: string; instance_id: string;
+  preset: string; preset_version: number; preset_customized?: boolean; revision: number; grants: ScopeGrant[]; effective_grants: ScopeGrant[];
+  status: string; created_at: string; expires_at: string; revoked_at: string | null; last_used_at: string | null;
+  credentials: Array<{ id: string; prefix: string; created_at: string; last_used_at: string | null; retire_at: string | null; revoked_at: string | null }>;
+}
+export interface TokenAudit { id: string; action: string; outcome: string; created_at: string; actor_id: string; request_id: string }
+export const tokenApi = {
+  catalogue: () => request<TokenCatalogue>('/api/v1/token-catalogue'),
+  list: (offset = 0) => request<{ items: IntegrationToken[] }>(`/api/v1/tokens?limit=100&offset=${offset}`),
+  create: (body: { name: string; integration: string; owner_id: string; grants: ScopeGrant[]; expires_at: string; preset: string; current_password: string }) =>
+    request<{ token: IntegrationToken; secret: string }>('/api/v1/tokens', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: string, body: { name: string; grants: ScopeGrant[]; expires_at: string; expected_revision: number; current_password: string }) =>
+    request<IntegrationToken>(`/api/v1/tokens/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  rotate: (id: string, body: { expected_revision: number; overlap_seconds: number; current_password: string }) =>
+    request<{ token: IntegrationToken; secret: string }>(`/api/v1/tokens/${id}/rotate`, { method: 'POST', body: JSON.stringify(body) }),
+  revoke: (ids: string[]) => request<{ revoked_ids: string[] }>('/api/v1/tokens/revoke', { method: 'POST', body: JSON.stringify({ ids }) }),
+  audit: (id: string) => request<{ items: TokenAudit[] }>(`/api/v1/tokens/${id}/audit-events`),
 };

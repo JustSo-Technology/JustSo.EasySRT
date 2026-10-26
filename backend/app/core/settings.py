@@ -3,6 +3,8 @@ from pathlib import Path
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.schemas.recovery import RecoveryPolicy
+
 
 class Settings(BaseSettings):
     app_name: str = "JustSo.EasySRT"
@@ -21,12 +23,19 @@ class Settings(BaseSettings):
     update_log_path: Path = Path("data/update-job.log")
     ffmpeg_binary: str = "ffmpeg"
     sender_service_name: str = "easysrt-sender"
+    recovery: RecoveryPolicy = RecoveryPolicy()
     update_repo_url: str = "https://github.com/JustSo-Technology/JustSo.EasySRT.git"
     update_repo_ref: str = "main"
     update_script_path: Path = Path("/usr/local/lib/justso-easysrt/update-ubuntu.sh")
     helper_socket_path: Path = Path("/run/justso-easysrt/helper.sock")
-    helper_request_timeout_seconds: float = 10.0
+    helper_request_timeout_seconds: float = 35.0
     github_token: str | None = None
+    api_requests_per_minute: int = 120
+    api_commands_per_minute: int = 6
+    api_instance_requests_per_minute: int = 1200
+    api_instance_commands_per_minute: int = 60
+    api_audit_retention_days: int = 90
+    api_command_retention_hours: int = 24
     session_cookie_name: str = "easysrt_session"
     session_max_age_seconds: int = 60 * 60 * 12
     session_cookie_secure: bool = False
@@ -38,7 +47,7 @@ class Settings(BaseSettings):
     updater_token_ttl_seconds: int = 300
     updater_session_ttl_seconds: int = 12 * 60 * 60
 
-    model_config = SettingsConfigDict(env_prefix="EASYSRT_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="EASYSRT_", env_file=".env", env_nested_delimiter="__", extra="ignore")
 
     @property
     def allowed_hosts(self) -> list[str]:

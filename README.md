@@ -58,3 +58,5 @@ Copyright © 2026 JUST SO GROUP PTY LTD, trading as JustSo. Technology.
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [CLA.md](CLA.md) before opening a
 pull request. Report vulnerabilities privately to security@justso.dev as
 described in [SECURITY.md](SECURITY.md).
+
+Scoped integration access and API tokens: [operator and API guide](docs/scoped-api.md).
